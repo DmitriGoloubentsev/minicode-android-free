@@ -1,6 +1,7 @@
 package com.minicode.ui.connection
 
 import android.app.DownloadManager
+import com.minicode.BuildConfig
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -95,6 +96,10 @@ class ConnectionActivity : AppCompatActivity() {
         }
 
         lifecycleScope.launch {
+            if (BuildConfig.FLAVOR == "foss") {
+                suggestParakeetDownload()
+                return@launch
+            }
             val update = UpdateChecker.check(this@ConnectionActivity) ?: run {
                 suggestParakeetDownload()
                 return@launch

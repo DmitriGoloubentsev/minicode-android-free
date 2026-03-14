@@ -50,6 +50,60 @@ Or configure Claude Code to use built-in terminal bell on the remote server (`~/
 - Bells are debounced (500ms) to prevent rapid-fire notifications
 - The setting persists across sessions
 
+## Releases
+
+### v1.3.0 (build 13)
+
+- Initial F-Droid and Google Play release
+- Skip update checker in FOSS flavor for F-Droid compliance
+- Full terminal emulator with xterm-256color support
+- Code editor with syntax highlighting for 30+ languages
+- SFTP file browser with create, rename, delete
+- Split-panel layout for foldable devices and tablets
+- Multi-session SSH with tabbed interface
+- Voice input support (Google Speech + offline Parakeet in Pro)
+- Persistent SSH connections via foreground service
+
+### Downloads
+
+| Flavor | Download |
+|--------|----------|
+| Pro (Sherpa-ONNX, 30 MB) | [minicode-play-1.3.0.apk](https://minicode.app/minicode/releases/minicode-play-1.3.0.apk) |
+| Free (12 MB) | [minicode-playFree-1.3.0.apk](https://minicode.app/minicode/releases/minicode-playFree-1.3.0.apk) |
+| FOSS (12 MB) | [minicode-foss-1.3.0.apk](https://minicode.app/minicode/releases/minicode-foss-1.3.0.apk) |
+
+## Google Play Submission
+
+1. Go to [Google Play Console](https://play.google.com/console)
+2. Create two app listings:
+   - **MiniCode** (`com.minicode`) — Paid $8.99
+   - **MiniCode Free** (`com.minicode.free`) — Free
+3. Fill in store listing (use content from `fastlane/metadata/android/en-US/`)
+4. Complete content rating questionnaire
+5. Set privacy policy URL: `https://minicode.app/privacy`
+6. Go to **Release** → **Production** → **Create new release**
+7. Upload signed APKs:
+   - `minicode-play-1.3.0.apk` for Pro
+   - `minicode-playFree-1.3.0.apk` for Free
+8. Add release notes and roll out
+
+### Building signed APKs
+
+```bash
+# Build
+./gradlew assemblePlayRelease assemblePlayFreeRelease
+
+# Sign
+APKSIGNER=$ANDROID_HOME/build-tools/35.0.0/apksigner
+ZIPALIGN=$ANDROID_HOME/build-tools/35.0.0/zipalign
+
+$ZIPALIGN -v -p 4 app/build/outputs/apk/play/release/app-play-release-unsigned.apk minicode-play.apk
+$APKSIGNER sign --ks minicode-release.jks --ks-key-alias minicode minicode-play.apk
+
+$ZIPALIGN -v -p 4 app/build/outputs/apk/playFree/release/app-playFree-release-unsigned.apk minicode-playFree.apk
+$APKSIGNER sign --ks minicode-release.jks --ks-key-alias minicode minicode-playFree.apk
+```
+
 ## Architecture
 
 - MVVM with Hilt DI, Kotlin coroutines, StateFlow
@@ -60,4 +114,4 @@ Or configure Claude Code to use built-in terminal bell on the remote server (`~/
 
 ## License
 
-Proprietary
+AGPL-3.0 — see [LICENSE](LICENSE)

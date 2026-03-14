@@ -1,0 +1,29 @@
+MiniCode - Third-Party Licenses
+
+MiniCode includes the following third-party libraries:
+
+Apache License 2.0:
+  - AndroidX Core, AppCompat, Fragment, Navigation, Lifecycle, Room,
+    ConstraintLayout, Security-Crypto
+  - Google Material Components
+  - Google Dagger/Hilt
+  - Apache MINA SSHD (sshd-core, sshd-sftp)
+  - Apache Commons Compress
+  - net.i2p.crypto EdDSA
+  - Kotlin Coroutines
+  - Kotlin Symbol Processing (KSP)
+  - Sherpa-ONNX (speech recognition runtime)
+
+LGPL v2.1:
+  - Rosemoe sora-editor (editor, language-textmate)
+
+MIT License:
+  - SLF4J Android binding
+
+TextMate grammar files are used under their respective licenses (MIT, Apache 2.0,
+or as specified in each grammar bundle).
+
+Full license texts for each dependency are available in the respective library
+repositories. Apache 2.0: https://www.apache.org/licenses/LICENSE-2.0
+LGPL v2.1: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+MIT: https://opensource.org/licenses/MIT

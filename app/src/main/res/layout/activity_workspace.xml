@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/dark_background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <!-- Session tab bar (hidden when single session) -->
+        <com.minicode.ui.workspace.SessionTabBar
+            android:id="@+id/session_tab_bar"
+            android:layout_width="match_parent"
+            android:layout_height="32dp"
+            android:visibility="gone" />
+
+        <!-- Terminal header bar -->
+        <LinearLayout
+            android:id="@+id/terminal_header"
+            android:layout_width="match_parent"
+            android:layout_height="32dp"
+            android:background="@color/dark_surface"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="12dp">
+
+            <View
+                android:id="@+id/status_dot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/status_dot"
+                android:layout_marginEnd="8dp" />
+
+            <TextView
+                android:id="@+id/text_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/dark_text"
+                android:textSize="12sp"
+                tools:text="user@host" />
+
+            <ImageView
+                android:id="@+id/btn_toggle_keyboard"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:contentDescription="Toggle keyboard"
+                android:padding="3dp"
+                android:src="@drawable/ic_keyboard"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:layout_marginEnd="4dp" />
+
+            <ImageView
+                android:id="@+id/btn_toggle_bell"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:contentDescription="Toggle bell notifications"
+                android:padding="3dp"
+                android:src="@drawable/ic_notifications"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:layout_marginEnd="4dp" />
+
+            <ImageView
+                android:id="@+id/btn_settings"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:contentDescription="Settings"
+                android:padding="3dp"
+                android:src="@drawable/ic_settings"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:layout_marginEnd="4dp" />
+
+            <ImageView
+                android:id="@+id/btn_disconnect"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:contentDescription="Disconnect"
+                android:padding="3dp"
+                android:src="@drawable/ic_close"
+                android:background="?attr/selectableItemBackgroundBorderless" />
+        </LinearLayout>
+
+        <!-- Content area: Terminal, Editor, and File Tree stacked -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <!-- Terminal view -->
+            <com.minicode.ui.terminal.TerminalView
+                android:id="@+id/terminal_view"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <!-- Editor panel (hidden by default) -->
+            <com.minicode.ui.editor.EditorPanelView
+                android:id="@+id/editor_panel"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone" />
+
+            <!-- File tree panel (hidden by default, full-screen when shown) -->
+            <com.minicode.ui.filetree.FileTreePanelView
+                android:id="@+id/file_tree_panel"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/dark_surface"
+                android:visibility="gone" />
+
+        </FrameLayout>
+
+        <!-- Keyboard toolbar (shown only for terminal) -->
+        <com.minicode.ui.terminal.KeyboardToolbarView
+            android:id="@+id/keyboard_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="44dp" />
+
+        <!-- Bottom navigation bar -->
+        <LinearLayout
+            android:id="@+id/bottom_nav_bar"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:background="@color/dark_surface"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <!-- Files tab -->
+            <LinearLayout
+                android:id="@+id/nav_files"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:id="@+id/nav_files_icon"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:src="@drawable/ic_file_tree"
+                    android:contentDescription="Files" />
+
+                <TextView
+                    android:id="@+id/nav_files_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Files"
+                    android:textSize="10sp"
+                    android:textColor="@color/dark_text_secondary" />
+            </LinearLayout>
+
+            <!-- Terminal tab -->
+            <LinearLayout
+                android:id="@+id/nav_terminal"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:id="@+id/nav_terminal_icon"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:src="@drawable/ic_terminal"
+                    android:contentDescription="Terminal" />
+
+                <TextView
+                    android:id="@+id/nav_terminal_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Terminal"
+                    android:textSize="10sp"
+                    android:textColor="@color/dark_text" />
+            </LinearLayout>
+
+            <!-- Editor tab -->
+            <LinearLayout
+                android:id="@+id/nav_editor"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:id="@+id/nav_editor_icon"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:src="@drawable/ic_edit"
+                    android:contentDescription="Editor" />
+
+                <TextView
+                    android:id="@+id/nav_editor_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Editor"
+                    android:textSize="10sp"
+                    android:textColor="@color/dark_text_secondary" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Connecting overlay -->
+    <FrameLayout
+        android:id="@+id/overlay_connecting"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#CC1E1E1E"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ProgressBar
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:indeterminate="true" />
+
+            <TextView
+                android:id="@+id/text_connecting_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Connecting..."
+                android:textColor="@color/dark_text"
+                android:textSize="16sp" />
+        </LinearLayout>
+    </FrameLayout>
+
+</FrameLayout>

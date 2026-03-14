@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/dark_background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+    <!-- Session tab bar (hidden when single session) -->
+    <com.minicode.ui.workspace.SessionTabBar
+        android:id="@+id/session_tab_bar"
+        android:layout_width="match_parent"
+        android:layout_height="32dp"
+        android:visibility="gone" />
+
+    <!-- Main split layout: FileTree | Editor/Terminal -->
+    <LinearLayout
+        android:id="@+id/split_root"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <!-- Left: File tree panel -->
+        <com.minicode.ui.filetree.FileTreePanelView
+            android:id="@+id/file_tree_panel"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.25"
+            android:background="@color/dark_surface" />
+
+        <!-- Vertical divider (thin line) -->
+        <View
+            android:id="@+id/divider_vertical"
+            android:layout_width="2dp"
+            android:layout_height="match_parent"
+            android:background="@color/dark_border" />
+
+        <!-- Right: Editor on top, Terminal on bottom -->
+        <LinearLayout
+            android:id="@+id/right_panel"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.75"
+            android:orientation="vertical">
+
+            <!-- Top: Editor panel -->
+            <com.minicode.ui.editor.EditorPanelView
+                android:id="@+id/editor_panel"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="0.55" />
+
+            <!-- Horizontal divider (thin line) -->
+            <View
+                android:id="@+id/divider_horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="2dp"
+                android:background="@color/dark_border" />
+
+            <!-- Bottom: Terminal header + terminal + keyboard toolbar -->
+            <LinearLayout
+                android:id="@+id/terminal_container"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="0.45"
+                android:orientation="vertical">
+
+                <!-- Terminal header bar -->
+                <LinearLayout
+                    android:id="@+id/terminal_header"
+                    android:layout_width="match_parent"
+                    android:layout_height="28dp"
+                    android:background="@color/dark_surface"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="8dp">
+
+                    <!-- Toggle file tree -->
+                    <ImageView
+                        android:id="@+id/btn_toggle_file_tree"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:contentDescription="Toggle file tree"
+                        android:padding="3dp"
+                        android:src="@drawable/ic_file_tree"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:layout_marginEnd="4dp" />
+
+                    <!-- Toggle editor -->
+                    <ImageView
+                        android:id="@+id/btn_toggle_editor"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:contentDescription="Toggle editor"
+                        android:padding="3dp"
+                        android:src="@drawable/ic_edit"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:layout_marginEnd="8dp" />
+
+                    <View
+                        android:id="@+id/status_dot"
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:background="@drawable/status_dot"
+                        android:layout_marginEnd="6dp" />
+
+                    <TextView
+                        android:id="@+id/text_title"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textColor="@color/dark_text_secondary"
+                        android:textSize="11sp"
+                        tools:text="user@host" />
+
+                    <ImageView
+                        android:id="@+id/btn_toggle_keyboard"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:contentDescription="Toggle keyboard"
+                        android:padding="3dp"
+                        android:src="@drawable/ic_keyboard"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:layout_marginEnd="4dp" />
+
+                    <ImageView
+                        android:id="@+id/btn_toggle_bell"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:contentDescription="Toggle bell notifications"
+                        android:padding="3dp"
+                        android:src="@drawable/ic_notifications"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:layout_marginEnd="4dp" />
+
+                    <ImageView
+                        android:id="@+id/btn_settings"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:contentDescription="Settings"
+                        android:padding="3dp"
+                        android:src="@drawable/ic_settings"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:layout_marginEnd="4dp" />
+
+                    <ImageView
+                        android:id="@+id/btn_disconnect"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:contentDescription="Disconnect"
+                        android:padding="3dp"
+                        android:src="@drawable/ic_close"
+                        android:background="?attr/selectableItemBackgroundBorderless" />
+
+                </LinearLayout>
+
+                <!-- Terminal view -->
+                <com.minicode.ui.terminal.TerminalView
+                    android:id="@+id/terminal_view"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+
+                <!-- Keyboard toolbar -->
+                <com.minicode.ui.terminal.KeyboardToolbarView
+                    android:id="@+id/keyboard_toolbar"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Floating split handle (circle at divider intersection) -->
+    <com.minicode.ui.workspace.SplitHandleView
+        android:id="@+id/split_handle"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:visibility="gone" />
+
+    <!-- Connecting overlay -->
+    <FrameLayout
+        android:id="@+id/overlay_connecting"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#CC1E1E1E"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ProgressBar
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:indeterminate="true" />
+
+            <TextView
+                android:id="@+id/text_connecting_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Connecting..."
+                android:textColor="@color/dark_text"
+                android:textSize="16sp" />
+        </LinearLayout>
+    </FrameLayout>
+
+</FrameLayout>

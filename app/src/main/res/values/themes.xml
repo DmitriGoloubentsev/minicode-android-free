@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MiniCode" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/dark_accent</item>
+        <item name="colorOnPrimary">@android:color/white</item>
+        <item name="colorSurface">@color/dark_surface</item>
+        <item name="colorOnSurface">@color/dark_text</item>
+        <item name="android:colorBackground">@color/dark_background</item>
+        <item name="colorError">@color/error</item>
+        <item name="android:statusBarColor">@color/dark_surface</item>
+        <item name="android:navigationBarColor">@color/dark_background</item>
+    </style>
+</resources>

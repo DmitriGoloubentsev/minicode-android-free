@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark theme (default) -->
+    <color name="dark_background">#FF1E1E1E</color>
+    <color name="dark_surface">#FF252526</color>
+    <color name="dark_surface_variant">#FF2D2D2D</color>
+    <color name="dark_border">#FF3E3E3E</color>
+    <color name="dark_text">#FFD4D4D4</color>
+    <color name="dark_text_secondary">#FF858585</color>
+    <color name="dark_accent">#FF007ACC</color>
+
+    <!-- AMOLED -->
+    <color name="amoled_background">#FF000000</color>
+    <color name="amoled_surface">#FF0A0A0A</color>
+
+    <!-- Light -->
+    <color name="light_background">#FFFFFFFF</color>
+    <color name="light_surface">#FFF3F3F3</color>
+    <color name="light_text">#FF1E1E1E</color>
+
+    <!-- Semantic -->
+    <color name="error">#FFF44747</color>
+    <color name="warning">#FFCCA700</color>
+    <color name="success">#FF4EC9B0</color>
+    <color name="info">#FF75BEFF</color>
+</resources>

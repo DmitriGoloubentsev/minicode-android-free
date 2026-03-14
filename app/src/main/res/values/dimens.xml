@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="file_tree_min_width">150dp</dimen>
+    <dimen name="file_tree_max_width">400dp</dimen>
+    <dimen name="terminal_min_height">100dp</dimen>
+    <dimen name="editor_min_height">200dp</dimen>
+    <dimen name="divider_thickness">4dp</dimen>
+    <dimen name="divider_hit_area">16dp</dimen>
+    <dimen name="tab_bar_height">36dp</dimen>
+    <dimen name="file_node_height">28dp</dimen>
+    <dimen name="file_node_indent">16dp</dimen>
+    <dimen name="toolbar_height">44dp</dimen>
+    <dimen name="toolbar_key_min_width">40dp</dimen>
+    <dimen name="landscape_min_width">700dp</dimen>
+</resources>

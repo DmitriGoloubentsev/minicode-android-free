@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_connection"
+    app:startDestination="@id/connectionListFragment">
+
+    <fragment
+        android:id="@+id/connectionListFragment"
+        android:name="com.minicode.ui.connection.ConnectionListFragment"
+        android:label="Connections">
+        <action
+            android:id="@+id/action_list_to_form"
+            app:destination="@id/connectionFormFragment"
+            app:enterAnim="@anim/slide_in_right"
+            app:exitAnim="@anim/slide_out_left"
+            app:popEnterAnim="@anim/slide_in_left"
+            app:popExitAnim="@anim/slide_out_right" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/connectionFormFragment"
+        android:name="com.minicode.ui.connection.ConnectionFormFragment"
+        android:label="Connection Form">
+        <argument
+            android:name="profile_id"
+            android:defaultValue="@null"
+            app:argType="string"
+            app:nullable="true" />
+    </fragment>
+
+</navigation>

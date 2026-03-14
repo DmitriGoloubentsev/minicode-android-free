@@ -1,0 +1,16 @@
+MiniCode is an SSH terminal and code editor for Android, designed for developers who manage remote servers from their phone or tablet.
+
+Features:
+- Full terminal emulator (VT100/xterm-256color) with 256-color support
+- Built-in code editor with syntax highlighting for 30+ languages
+- SFTP file browser with create, rename, and delete operations
+- Split-panel layout on foldable devices and tablets (file tree + editor + terminal)
+- Multi-session SSH with tabbed interface
+- Draggable panel dividers for custom layout sizing
+- Text selection and copy in terminal
+- Keyboard toolbar with common keys (Ctrl, Tab, Esc, arrows)
+- Voice input support (Google Speech)
+- Persistent SSH connections via foreground service with wake/wifi locks
+- Dark theme optimized for terminal use
+
+Built with security in mind — connections use SSH key or password authentication via Apache MINA SSHD. No telemetry, no tracking, no ads.

@@ -1,0 +1,8 @@
+Initial F-Droid release.
+
+- Full terminal emulator with xterm-256color support
+- Code editor with syntax highlighting
+- SFTP file browser
+- Split-panel layout for foldable devices
+- Multi-session SSH with tabs
+- Voice input support

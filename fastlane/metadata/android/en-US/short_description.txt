@@ -1,0 +1,1 @@
+SSH terminal and code editor with split-panel layout

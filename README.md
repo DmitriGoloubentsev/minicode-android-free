@@ -1,76 +1,63 @@
 # MiniCode
 
-Native Android SSH terminal and code editor, built for Samsung foldable devices.
+Native Android SSH terminal and code editor, designed for foldable devices and tablets.
 
 ## Features
 
 - **SSH Terminal** — Full VT100/xterm-256color terminal emulator via Apache MINA SSHD
-- **Code Editor** — Syntax highlighting for 20+ languages using sora-editor with TextMate grammars
+- **Code Editor** — Syntax highlighting for 30+ languages using sora-editor with TextMate grammars
 - **SFTP File Tree** — Browse, create, rename, and delete remote files
-- **Split Layout** — Side-by-side file tree, editor, and terminal on foldable inner display (600dp+)
-- **Voice Input** — Hold mic button to dictate commands; auto-restarts on timeout for continuous recording
+- **Split Layout** — Side-by-side file tree, editor, and terminal on foldable/tablet displays (600dp+)
+- **Multi-Session SSH** — Tabbed interface for multiple concurrent connections
+- **Voice Input** — Hold mic button to dictate commands; supports Google Speech
 - **Bell Notifications** — Terminal BEL character triggers vibration and/or chime (configurable)
 - **Floating Toolbar** — Draggable Esc/Backspace/Enter/Mic buttons, adjusts for keyboard
-- **Keyboard Toolbar** — Optional Ctrl/Alt/Tab/Esc/arrow keys bar (toggle via long-press Esc)
+- **Keyboard Toolbar** — Optional Ctrl/Alt/Tab/Esc/arrow keys bar
 - **Fold/Unfold** — Seamless transition between cover and inner display without losing session
+- **Persistent Connections** — Foreground service with wake/wifi locks survives long network outages
 
 ## Build
 
 ```bash
-JAVA_HOME=/opt/android-studio/jbr ANDROID_HOME=/opt/dimach/Android/Sdk ./gradlew assembleDebug
+./gradlew assembleFossDebug
 ```
 
 Install on device:
 ```bash
-adb install app/build/outputs/apk/debug/app-debug.apk
+adb install app/build/outputs/apk/foss/debug/app-foss-debug.apk
 ```
+
+## Screenshots
+
+<p float="left">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.jpg" width="400" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.jpg" width="200" />
+</p>
 
 ## Bell Notifications
 
 MiniCode's terminal responds to the BEL character (`\a` / `0x07`) with vibration and/or chime. Toggle the mode via the bell icon in the terminal header bar (cycles: off / vibrate / vibrate+chime).
 
-### With Claude Code
-
-To get notified when Claude Code finishes a task:
-
-```bash
-printf '\a' > /proc/$PPID/fd/1
-```
-
-Or configure Claude Code to use built-in terminal bell on the remote server (`~/.claude/settings.json`):
-
-```json
-{
-  "preferredNotifChannel": "terminal_bell"
-}
-```
-
-### Notes
-- Chime uses the ALARM audio stream, so it plays even on silent mode
-- Bells are debounced (500ms) to prevent rapid-fire notifications
-- The setting persists across sessions
-
 ## Releases
 
 ### v1.3.0 (build 13)
 
-- Initial F-Droid and Google Play release
-- Skip update checker in FOSS flavor for F-Droid compliance
+- Initial public release
 - Full terminal emulator with xterm-256color support
 - Code editor with syntax highlighting for 30+ languages
 - SFTP file browser with create, rename, delete
 - Split-panel layout for foldable devices and tablets
 - Multi-session SSH with tabbed interface
-- Voice input support (Google Speech + offline Parakeet in Pro)
+- Voice input support
 - Persistent SSH connections via foreground service
 
 ### Downloads
 
 | Flavor | Download |
 |--------|----------|
-| Pro (Sherpa-ONNX, 30 MB) | [minicode-play-1.3.0.apk](https://minicode.app/minicode/releases/minicode-play-1.3.0.apk) |
-| Free (12 MB) | [minicode-playFree-1.3.0.apk](https://minicode.app/minicode/releases/minicode-playFree-1.3.0.apk) |
-| FOSS (12 MB) | [minicode-foss-1.3.0.apk](https://minicode.app/minicode/releases/minicode-foss-1.3.0.apk) |
+| FOSS (5 MB) | [minicode-foss-1.3.0.apk](https://minicode.app/minicode/releases/minicode-foss-1.3.0.apk) |
+
+Also available on [F-Droid](https://f-droid.org) (pending) and [Google Play](https://play.google.com/store/apps/details?id=com.minicode) (pending).
 
 ## Architecture
 

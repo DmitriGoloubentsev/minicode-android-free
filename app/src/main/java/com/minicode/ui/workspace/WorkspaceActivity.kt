@@ -831,10 +831,11 @@ class WorkspaceActivity : AppCompatActivity() {
         val input = TextInputEditText(inputLayout.context).apply {
             inputType = AndroidInputType.TYPE_CLASS_TEXT or AndroidInputType.TYPE_TEXT_VARIATION_PASSWORD
             hint = "Password"
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_GO
         }
         inputLayout.addView(input)
 
-        MaterialAlertDialogBuilder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle("Password for ${request.profile.username}@${request.profile.host}")
             .setView(inputLayout)
             .setPositiveButton("Connect") { _, _ ->
@@ -849,6 +850,14 @@ class WorkspaceActivity : AppCompatActivity() {
                 if (viewModel.sessionList.value.isEmpty()) finish()
             }
             .show()
+
+        input.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_GO) {
+                viewModel.connectWithPassword(input.text?.toString() ?: "")
+                dialog.dismiss()
+                true
+            } else false
+        }
 
         // Auto-show keyboard for the password field
         input.requestFocus()

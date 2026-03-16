@@ -62,7 +62,7 @@ class SettingsRepository @Inject constructor(
 
     /** Bell notification mode: 0=off, 1=vibrate only, 2=vibrate+chime */
     var bellMode: Int
-        get() = prefs.getInt("bell_mode", 2)
+        get() = prefs.getInt("bell_mode", 0)
         set(value) = prefs.edit().putInt("bell_mode", value).apply()
 
     /** Speech engine: "google" or "parakeet" */

@@ -79,4 +79,11 @@ class SettingsRepository @Inject constructor(
     var imageUploadMode: String
         get() = prefs.getString("image_upload_mode", "tmp") ?: "tmp"
         set(value) = prefs.edit().putString("image_upload_mode", value).apply()
+
+    /** Per-connection last used upload path */
+    fun getUploadPath(profileId: String): String? =
+        prefs.getString("upload_path_$profileId", null)
+
+    fun setUploadPath(profileId: String, path: String) =
+        prefs.edit().putString("upload_path_$profileId", path).apply()
 }

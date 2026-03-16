@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.minicode.data.repository.ConnectionRepository
 import com.minicode.data.repository.SettingsRepository
+import com.minicode.model.AuthType
 import com.minicode.model.ConnectionProfile
 import com.minicode.model.SessionHandle
 import com.minicode.model.SshSessionState
@@ -41,6 +42,11 @@ class WorkspaceViewModel @Inject constructor(
     private val _reconnecting = MutableStateFlow(false)
     val reconnecting: StateFlow<Boolean> = _reconnecting.asStateFlow()
 
+    /** Emitted when a password prompt is needed before connecting */
+    data class PasswordRequest(val profileId: String, val profile: ConnectionProfile)
+    private val _passwordRequest = MutableStateFlow<PasswordRequest?>(null)
+    val passwordRequest: StateFlow<PasswordRequest?> = _passwordRequest.asStateFlow()
+
     // Track per-session profile for title display
     private val profileCache = HashMap<String, ConnectionProfile>()
 
@@ -73,6 +79,12 @@ class WorkspaceViewModel @Inject constructor(
             val privateKey = repository.getPrivateKey(profileId)
             val passphrase = repository.getPassphrase(profileId)
 
+            // Prompt for password if auth type is PASSWORD and no stored password
+            if (prof.authType == AuthType.PASSWORD && password.isNullOrEmpty()) {
+                _passwordRequest.value = PasswordRequest(profileId, prof)
+                return@launch
+            }
+
             try {
                 val handle = sessionManager.connect(
                     profile = prof,
@@ -89,6 +101,34 @@ class WorkspaceViewModel @Inject constructor(
                 // Error is exposed via sessionManager.error
             }
         }
+    }
+
+    /** Connect with a user-provided password (session-only, not persisted) */
+    fun connectWithPassword(password: String) {
+        val request = _passwordRequest.value ?: return
+        _passwordRequest.value = null
+        viewModelScope.launch {
+            val prof = request.profile
+            try {
+                val handle = sessionManager.connect(
+                    profile = prof,
+                    password = password,
+                    privateKey = null,
+                    passphrase = null,
+                    initialCols = lastCols,
+                    initialRows = lastRows,
+                    scope = viewModelScope,
+                )
+                _bridge.value = handle.bridge
+                repository.updateLastUsed(request.profileId)
+            } catch (_: Exception) {
+                // Error is exposed via sessionManager.error
+            }
+        }
+    }
+
+    fun cancelPasswordRequest() {
+        _passwordRequest.value = null
     }
 
     fun switchSession(sessionId: String) {

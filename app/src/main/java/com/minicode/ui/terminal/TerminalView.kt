@@ -378,12 +378,10 @@ class TerminalView @JvmOverloads constructor(
             val prevOffset = scrollOffset
             scrollOffset = (scrollOffset + autoScrollDirection).coerceIn(0, maxScroll)
             if (scrollOffset != prevOffset) {
-                // Adjust the dragged selection endpoint to follow the scroll
-                if (draggingHandle == 1) {
-                    selStartRow -= autoScrollDirection
-                } else {
-                    selEndRow -= autoScrollDirection
-                }
+                // Adjust both endpoints: the dragged one follows the finger,
+                // the anchored one must compensate for viewport shift
+                selStartRow -= autoScrollDirection
+                selEndRow -= autoScrollDirection
                 invalidate()
             }
             autoScrollHandler.postDelayed(this, 80) // ~12 lines/sec

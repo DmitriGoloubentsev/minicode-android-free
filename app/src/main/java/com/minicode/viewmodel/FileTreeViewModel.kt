@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.InputStream
 import javax.inject.Inject
 
 private const val TAG = "FileTreeViewModel"
@@ -264,6 +265,26 @@ class FileTreeViewModel @Inject constructor(
             fullPath
         } catch (e: Exception) {
             _error.value = "Failed to upload image: ${e.message}"
+            null
+        }
+    }
+
+    suspend fun uploadFile(
+        dirPath: String,
+        fileName: String,
+        inputStream: InputStream,
+        totalSize: Long,
+        onProgress: (Long, Long) -> Unit,
+    ): String? {
+        return try {
+            try { retryWithReconnect { sftp -> sftp.mkdir(dirPath) } } catch (_: Exception) {}
+            val fullPath = "$dirPath/$fileName"
+            retryWithReconnect { sftp ->
+                sftp.writeFileStream(fullPath, inputStream, totalSize, onProgress)
+            }
+            fullPath
+        } catch (e: Exception) {
+            _error.value = "Failed to upload file: ${e.message}"
             null
         }
     }

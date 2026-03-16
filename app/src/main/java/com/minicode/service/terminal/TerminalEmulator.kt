@@ -206,6 +206,10 @@ class TerminalEmulator(
 
     private fun processCsi(ch: Char) {
         when {
+            ch == '\u001b' -> {
+                // ESC interrupts CSI — start new escape sequence
+                state = ParseState.ESCAPE
+            }
             ch in '0'..'9' || ch == ';' || ch == '?' || ch == '>' || ch == '!' || ch == ' ' || ch == '"' || ch == '\'' -> {
                 escParams.append(ch)
             }

@@ -9,6 +9,7 @@ import org.apache.sshd.sftp.client.SftpClient
 import org.apache.sshd.sftp.client.SftpClientFactory
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.InputStream
 
 private const val TAG = "SftpService"
 
@@ -90,6 +91,35 @@ class SftpService(private val session: ClientSession) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to write file: $path", e)
+            throw e
+        }
+    }
+
+    suspend fun writeFileStream(
+        path: String,
+        inputStream: InputStream,
+        totalSize: Long,
+        onProgress: (bytesWritten: Long, totalBytes: Long) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        try {
+            val client = getClient()
+            val handle = client.open(
+                path,
+                setOf(SftpClient.OpenMode.Write, SftpClient.OpenMode.Create, SftpClient.OpenMode.Truncate)
+            )
+            handle.use { h ->
+                val buf = ByteArray(32768)
+                var offset = 0L
+                while (true) {
+                    val n = inputStream.read(buf)
+                    if (n <= 0) break
+                    client.write(h, offset, buf, 0, n)
+                    offset += n
+                    onProgress(offset, totalSize)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to write file stream: $path", e)
             throw e
         }
     }

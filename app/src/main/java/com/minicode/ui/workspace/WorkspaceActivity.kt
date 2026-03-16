@@ -41,8 +41,11 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import android.text.InputType as AndroidInputType
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import com.minicode.R
 import com.minicode.data.repository.SettingsRepository
 import com.minicode.service.SshConnectionService
@@ -110,9 +113,15 @@ class WorkspaceActivity : AppCompatActivity() {
         micPendingStart = false
     }
 
+    private var pendingUploadDir: String = "/tmp"
+
     private val imagePickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri -> uri?.let { handleImagePicked(it) } }
+
+    private val filePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { handleFilePicked(it) } }
 
     // Session tab bar (both layouts)
     private lateinit var sessionTabBar: SessionTabBar
@@ -806,18 +815,82 @@ class WorkspaceActivity : AppCompatActivity() {
         keyboardToolbar.onImagePaste = {
             showImageUploadOptions()
         }
+        keyboardToolbar.onFileUpload = {
+            showFileUploadOptions()
+        }
+    }
+
+    private fun showPasswordPrompt(request: WorkspaceViewModel.PasswordRequest) {
+        val inputLayout = TextInputLayout(this).apply {
+            endIconMode = TextInputLayout.END_ICON_PASSWORD_TOGGLE
+            setPadding(
+                (24 * resources.displayMetrics.density).toInt(), 0,
+                (24 * resources.displayMetrics.density).toInt(), 0
+            )
+        }
+        val input = TextInputEditText(inputLayout.context).apply {
+            inputType = AndroidInputType.TYPE_CLASS_TEXT or AndroidInputType.TYPE_TEXT_VARIATION_PASSWORD
+            hint = "Password"
+        }
+        inputLayout.addView(input)
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Password for ${request.profile.username}@${request.profile.host}")
+            .setView(inputLayout)
+            .setPositiveButton("Connect") { _, _ ->
+                viewModel.connectWithPassword(input.text?.toString() ?: "")
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                viewModel.cancelPasswordRequest()
+                if (viewModel.sessionList.value.isEmpty()) finish()
+            }
+            .setOnCancelListener {
+                viewModel.cancelPasswordRequest()
+                if (viewModel.sessionList.value.isEmpty()) finish()
+            }
+            .show()
+
+        // Auto-show keyboard for the password field
+        input.requestFocus()
+        input.postDelayed({
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+        }, 200)
     }
 
     private fun showImageUploadOptions() {
-        val modes = arrayOf("Upload to /tmp", "Upload to project/images")
-        val currentMode = settingsRepository.imageUploadMode
-        val checked = if (currentMode == "project") 1 else 0
+        showUploadPathDialog("Image Upload") { path ->
+            pendingUploadDir = path
+            imagePickerLauncher.launch("image/*")
+        }
+    }
+
+    private fun showUploadPathDialog(title: String, onConfirm: (String) -> Unit) {
+        val profileId = viewModel.activeSessionId.value?.let {
+            viewModel.sessionManager.getSessionHandle(it)?.profileId
+        }
+        val savedPath = profileId?.let { settingsRepository.getUploadPath(it) }
+        val defaultPath = savedPath ?: fileTreeViewModel.currentPath.value.ifEmpty { "/tmp" }
+
+        val input = TextInputEditText(this).apply {
+            setText(defaultPath)
+            setSelection(text?.length ?: 0)
+            setPadding(
+                (24 * resources.displayMetrics.density).toInt(),
+                (16 * resources.displayMetrics.density).toInt(),
+                (24 * resources.displayMetrics.density).toInt(),
+                0
+            )
+        }
+
         MaterialAlertDialogBuilder(this)
-            .setTitle("Image Upload")
-            .setSingleChoiceItems(modes, checked) { dialog, which ->
-                settingsRepository.imageUploadMode = if (which == 1) "project" else "tmp"
-                dialog.dismiss()
-                imagePickerLauncher.launch("image/*")
+            .setTitle(title)
+            .setMessage("Upload destination path:")
+            .setView(input)
+            .setPositiveButton("Choose File") { _, _ ->
+                val path = input.text?.toString()?.trim() ?: "/tmp"
+                if (profileId != null) settingsRepository.setUploadPath(profileId, path)
+                onConfirm(path)
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -838,16 +911,9 @@ class WorkspaceActivity : AppCompatActivity() {
                 } ?: "png"
                 val fileName = "minicode-$timestamp.$ext"
 
-                val uploadDir = if (settingsRepository.imageUploadMode == "project") {
-                    val currentPath = fileTreeViewModel.currentPath.value
-                    if (currentPath.isNotEmpty()) "$currentPath/images" else "/tmp"
-                } else {
-                    "/tmp"
-                }
-
                 Toast.makeText(this@WorkspaceActivity, "Uploading image...", Toast.LENGTH_SHORT).show()
 
-                val remotePath = fileTreeViewModel.uploadImage(uploadDir, fileName, bytes)
+                val remotePath = fileTreeViewModel.uploadImage(pendingUploadDir, fileName, bytes)
                 if (remotePath != null) {
                     viewModel.writeInput((remotePath).toByteArray(Charsets.UTF_8))
                     Toast.makeText(this@WorkspaceActivity, "Image uploaded", Toast.LENGTH_SHORT).show()
@@ -855,6 +921,95 @@ class WorkspaceActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "Image upload failed", e)
                 Toast.makeText(this@WorkspaceActivity, "Upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun showFileUploadOptions() {
+        showUploadPathDialog("Upload File") { path ->
+            pendingUploadDir = path
+            filePickerLauncher.launch(arrayOf("*/*"))
+        }
+    }
+
+    private fun handleFilePicked(uri: Uri) {
+        lifecycleScope.launch {
+            try {
+                var fileName = "uploaded_file"
+                var totalSize = -1L
+                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIdx >= 0) fileName = cursor.getString(nameIdx) ?: fileName
+                        val sizeIdx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                        if (sizeIdx >= 0) totalSize = cursor.getLong(sizeIdx)
+                    }
+                }
+
+                val inputStream = contentResolver.openInputStream(uri)
+                if (inputStream == null) {
+                    Toast.makeText(this@WorkspaceActivity, "Failed to read file", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                // Show progress dialog for files > 100KB
+                val showProgress = totalSize > 100_000
+                var progressDialog: androidx.appcompat.app.AlertDialog? = null
+                var progressBar: android.widget.ProgressBar? = null
+                var progressText: TextView? = null
+
+                if (showProgress) {
+                    val layout = LinearLayout(this@WorkspaceActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        val pad = (24 * resources.displayMetrics.density).toInt()
+                        setPadding(pad, pad, pad, pad)
+                    }
+                    progressBar = android.widget.ProgressBar(
+                        this@WorkspaceActivity, null,
+                        android.R.attr.progressBarStyleHorizontal
+                    ).apply {
+                        max = 100
+                        progress = 0
+                    }
+                    progressText = TextView(this@WorkspaceActivity).apply {
+                        text = "0%"
+                        setPadding(0, (8 * resources.displayMetrics.density).toInt(), 0, 0)
+                    }
+                    layout.addView(progressBar)
+                    layout.addView(progressText)
+                    progressDialog = MaterialAlertDialogBuilder(this@WorkspaceActivity)
+                        .setTitle("Uploading $fileName")
+                        .setView(layout)
+                        .setCancelable(false)
+                        .show()
+                } else {
+                    Toast.makeText(this@WorkspaceActivity, "Uploading $fileName...", Toast.LENGTH_SHORT).show()
+                }
+
+                inputStream.use { stream ->
+                    val remotePath = fileTreeViewModel.uploadFile(
+                        pendingUploadDir, fileName, stream, totalSize
+                    ) { bytesWritten, total ->
+                        if (showProgress && total > 0) {
+                            val pct = (bytesWritten * 100 / total).toInt()
+                            runOnUiThread {
+                                progressBar?.progress = pct
+                                progressText?.text = "$pct%"
+                            }
+                        }
+                    }
+                    runOnUiThread {
+                        progressDialog?.dismiss()
+                        if (remotePath != null) {
+                            Toast.makeText(this@WorkspaceActivity, "Uploaded: $fileName", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "File upload failed", e)
+                runOnUiThread {
+                    Toast.makeText(this@WorkspaceActivity, "Upload failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -1976,6 +2131,11 @@ class WorkspaceActivity : AppCompatActivity() {
                 if (sessions.isNotEmpty()) {
                     sessionTabBar.updateSessions(sessions, activeId)
                 }
+            }
+        }
+        launch {
+            viewModel.passwordRequest.collect { request ->
+                if (request != null) showPasswordPrompt(request)
             }
         }
         launch {

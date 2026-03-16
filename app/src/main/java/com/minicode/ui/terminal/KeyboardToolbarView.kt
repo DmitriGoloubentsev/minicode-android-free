@@ -25,6 +25,7 @@ class KeyboardToolbarView @JvmOverloads constructor(
     var onAltToggle: ((Boolean) -> Unit)? = null
     var onPaste: (() -> Unit)? = null
     var onImagePaste: (() -> Unit)? = null
+    var onFileUpload: (() -> Unit)? = null
 
     private var ctrlActive = false
     private var altActive = false
@@ -64,6 +65,8 @@ class KeyboardToolbarView @JvmOverloads constructor(
 
         // Image paste button
         addImageKey(container)
+        // File upload button
+        addFileUploadKey(container)
 
         addSeparator(container)
 
@@ -226,6 +229,26 @@ class KeyboardToolbarView @JvmOverloads constructor(
             setOnClickListener {
                 performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 onImagePaste?.invoke()
+            }
+        }
+        val size = toolbarHeight - 2 * keyMargin
+        val lp = LinearLayout.LayoutParams(size, size).apply {
+            setMargins(keyMargin, 0, keyMargin, 0)
+        }
+        container.addView(iv, lp)
+    }
+
+    private fun addFileUploadKey(container: LinearLayout) {
+        val iv = ImageView(context).apply {
+            setImageResource(R.drawable.ic_upload)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            background = makeKeyBackground(false)
+            isClickable = true
+            isFocusable = false
+            contentDescription = "Upload file"
+            setOnClickListener {
+                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                onFileUpload?.invoke()
             }
         }
         val size = toolbarHeight - 2 * keyMargin

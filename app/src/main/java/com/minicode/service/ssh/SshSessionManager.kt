@@ -145,8 +145,8 @@ class SshSessionManager @Inject constructor() {
             val termBridge = TerminalSessionBridge(channel, emulator, scope)
             val sessionState = MutableStateFlow(SshSessionState.CONNECTED)
             termBridge.onDisconnect = {
-                // Auto-close the tab when shell exits (logout, exit, etc.)
-                disconnect(sessionId)
+                // Keep tab as disconnected (grey dot) — user can tap to reconnect
+                markDisconnected(sessionId)
             }
             termBridge.start()
 
@@ -309,7 +309,7 @@ class SshSessionManager @Inject constructor() {
             val emulator = TerminalEmulator(cols, rows)
             val newBridge = TerminalSessionBridge(channel, emulator, scope)
             newBridge.onDisconnect = {
-                disconnect(sessionId)
+                markDisconnected(sessionId)
             }
 
             // Set up sessio callback before start() so detection fires during initial output
@@ -383,6 +383,27 @@ class SshSessionManager @Inject constructor() {
             }
             throw e
         }
+    }
+
+    /** Mark a session as disconnected but keep the tab (for reconnect on tap).
+     *  Replaces the bridge with a disconnected stub so the emulator stays visible. */
+    fun markDisconnected(sessionId: String) {
+        val entry = sessions[sessionId] ?: return
+        val handle = entry.handle
+        idleTimers.remove(sessionId)?.cancel(false)
+        handle.bridge.stop()
+        try { entry.sshSession?.close() } catch (_: Exception) {}
+        entry.sshSession = null
+        // Replace bridge with disconnected stub so UI still has an emulator to display
+        val cols = handle.bridge.emulator.columns
+        val rows = handle.bridge.emulator.rows
+        handle.bridge = TerminalSessionBridge.createDisconnected(cols, rows)
+        handle.state.value = SshSessionState.DISCONNECTED
+        if (_activeSessionId.value == sessionId) {
+            _state.value = SshSessionState.DISCONNECTED
+        }
+        publishSessionList()
+        Log.d(TAG, "Session $sessionId marked disconnected (tab kept)")
     }
 
     /** Get session IDs in tab order */

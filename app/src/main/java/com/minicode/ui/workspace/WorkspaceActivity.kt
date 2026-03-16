@@ -479,7 +479,17 @@ class WorkspaceActivity : AppCompatActivity() {
     private fun setupSessionTabBar() {
         sessionTabBar.onTabSelected = { sessionId ->
             hideConnectionList()
-            switchToSession(sessionId)
+            val handle = viewModel.sessionManager.getSessionHandle(sessionId)
+            if (handle != null && handle.bridge.isDisconnected) {
+                // Disconnected tab tapped — switch to it first, then reconnect
+                switchToSession(sessionId)
+                val cols = terminalView.calculateColumns().coerceAtLeast(20)
+                val rows = terminalView.calculateRows().coerceAtLeast(5)
+                viewModel.reconnectSession(sessionId, cols, rows)
+                Toast.makeText(this, "Reconnecting...", Toast.LENGTH_SHORT).show()
+            } else {
+                switchToSession(sessionId)
+            }
         }
         sessionTabBar.onTabClosed = { sessionId ->
             confirmCloseSession(sessionId)
@@ -1344,18 +1354,22 @@ class WorkspaceActivity : AppCompatActivity() {
         // Timer sits at top of container, column below it
         column.setPadding(0, (24 * density).toInt(), 0, 0)
 
-        // Position from saved settings
+        // Position from saved settings, accounting for system bar insets (landscape nav bar)
         container.post {
             val parentW = rootFrame.width
             val parentH = rootFrame.height
+            val insets = ViewCompat.getRootWindowInsets(rootFrame)
+            val systemBarInsets = insets?.getInsets(WindowInsetsCompat.Type.systemBars())
+            val rightInset = systemBarInsets?.right ?: 0
+            val leftInset = systemBarInsets?.left ?: 0
             // micButtonY is fraction for bottom edge of container
             val bottomY = settingsRepository.micButtonY * parentH
             val savedY = (bottomY - container.height).coerceIn(0f, (parentH - container.height).toFloat())
             container.y = savedY
             if (settingsRepository.micButtonRight) {
-                container.x = (parentW - container.width - margin).toFloat()
+                container.x = (parentW - container.width - margin - rightInset).toFloat()
             } else {
-                container.x = margin.toFloat()
+                container.x = (margin + leftInset).toFloat()
             }
         }
 
@@ -1485,7 +1499,11 @@ class WorkspaceActivity : AppCompatActivity() {
                     if (isDragging) {
                         val centerX = container.x + container.width / 2f
                         val onRight = centerX > parentW / 2f
-                        container.x = if (onRight) (parentW - container.width - margin).toFloat() else margin.toFloat()
+                        val dragInsets = ViewCompat.getRootWindowInsets(rootFrame)
+                        val dragSystemBar = dragInsets?.getInsets(WindowInsetsCompat.Type.systemBars())
+                        val dragRightInset = dragSystemBar?.right ?: 0
+                        val dragLeftInset = dragSystemBar?.left ?: 0
+                        container.x = if (onRight) (parentW - container.width - margin - dragRightInset).toFloat() else (margin + dragLeftInset).toFloat()
                         settingsRepository.micButtonRight = onRight
                         settingsRepository.micButtonY = (container.y + container.height) / parentH
                     } else if (isRecording && v === mic) {
@@ -2537,8 +2555,23 @@ class WorkspaceActivity : AppCompatActivity() {
                 SshSessionState.DISCONNECTED -> {
                     statusDrawable?.setColor(getColor(R.color.dark_text_secondary))
                     overlayConnecting.visibility = View.GONE
-                    stopService(Intent(this, SshConnectionService::class.java))
-                    // If connection was lost unexpectedly and battery optimization is on, suggest disabling
+                    // Only stop foreground service if ALL sessions are disconnected
+                    val anyConnected = viewModel.sessionManager.getAllSessions().any {
+                        it.state.value == SshSessionState.CONNECTED
+                    }
+                    if (!anyConnected) {
+                        stopService(Intent(this, SshConnectionService::class.java))
+                    }
+                    // Auto-reconnect the active session if it was dropped unexpectedly
+                    val activeId = viewModel.activeSessionId.value
+                    val activeHandle = activeId?.let { viewModel.sessionManager.getSessionHandle(it) }
+                    if (activeHandle != null && activeHandle.bridge.isDisconnected && !userClosedAllSessions) {
+                        val cols = terminalView.calculateColumns().coerceAtLeast(20)
+                        val rows = terminalView.calculateRows().coerceAtLeast(5)
+                        viewModel.reconnectSession(activeId, cols, rows)
+                        overlayConnecting.visibility = View.VISIBLE
+                        textConnectingStatus.text = "Reconnecting..."
+                    }
                     promptBatteryOptimization()
                 }
                 SshSessionState.CONNECTING -> {

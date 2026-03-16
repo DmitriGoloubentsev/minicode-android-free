@@ -662,6 +662,13 @@ class WorkspaceActivity : AppCompatActivity() {
                 runOnUiThread { handleSessioDetected(sessions, handle) }
             }
             terminalView.invalidate()
+
+            // Show pending sessio picker if sessions were detected while this tab was in background
+            val pending = handle.pendingSessioSessions
+            if (pending != null && pending.isNotEmpty()) {
+                handle.pendingSessioSessions = null
+                handleSessioDetected(pending, handle)
+            }
         }
 
         // Update editor panel
@@ -672,6 +679,7 @@ class WorkspaceActivity : AppCompatActivity() {
         // Update file tree — initialize SFTP if needed (e.g. after restore/reconnect)
         fileTreeViewModel.initialize()
         editorViewModel.initialize()
+        editorViewModel.reloadRestoredTabs(sessionId)
         fileTreePanel.updateNodes(fileTreeViewModel.visibleNodes.value)
         fileTreePanel.updatePath(fileTreeViewModel.currentPath.value)
 
@@ -2369,10 +2377,18 @@ class WorkspaceActivity : AppCompatActivity() {
                             bridge.resize(cols, rows)
                         }
                         // Initialize SFTP services — skip during session switch since
-                        // switchToSession() already handles this
-                        fileTreeViewModel.initialize()
-                        viewModel.activeSessionId.value?.let { editorPanel.switchSession(it) }
-                        editorViewModel.initialize()
+                        // switchToSession() already handles this.
+                        // Also skip for disconnected stub bridges (restore placeholders) —
+                        // SFTP isn't available yet, wait for the real bridge.
+                        if (!bridge.isDisconnected) {
+                            fileTreeViewModel.initialize()
+                            viewModel.activeSessionId.value?.let { sessionKey ->
+                                editorPanel.switchSession(sessionKey)
+                                editorViewModel.initialize()
+                                // Reload restored editor tabs (stubs with no content) after SFTP is ready
+                                editorViewModel.reloadRestoredTabs(sessionKey)
+                            }
+                        }
                     }
                 }
             }
@@ -2443,6 +2459,10 @@ class WorkspaceActivity : AppCompatActivity() {
                     } else if (activePanel == "editor") {
                         switchToTerminal()
                     }
+                } else if (tabs.isNotEmpty() && isSplitMode && !editorVisible) {
+                    // Auto-show editor when tabs appear (e.g. after session restore)
+                    editorVisible = true
+                    applySplitVisibility()
                 }
             }
         }

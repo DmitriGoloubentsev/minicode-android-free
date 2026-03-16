@@ -102,21 +102,25 @@ class EditorViewModel @Inject constructor(
         state.activeTabIndex = activeIndex
     }
 
-    /** Reload file contents for restored tabs after SSH reconnect */
+    /** Reload file contents for restored tabs (stubs with empty content) after SSH reconnect */
     fun reloadRestoredTabs(sessionKey: String) {
-        val state = sessionStates[sessionKey] ?: return
-        val paths = state.tabs.map { it.filePath }
-        if (paths.isEmpty()) return
+        val tabs = if (sessionKey == activeSessionKey) _tabs.value else sessionStates[sessionKey]?.tabs ?: emptyList()
+        // Only reload stub tabs (empty content = restored from persistence, not yet loaded from SFTP)
+        val stubPaths = tabs.filter { it.content.isEmpty() && it.imageBytes == null }.map { it.filePath }
+        if (stubPaths.isEmpty()) return
 
         // Clear stubs so openFile can re-add them with content
-        state.tabs = emptyList()
-        state.activeTabIndex = -1
+        val state = sessionStates[sessionKey]
+        if (state != null) {
+            state.tabs = emptyList()
+            state.activeTabIndex = -1
+        }
         if (sessionKey == activeSessionKey) {
             _tabs.value = emptyList()
             _activeTabIndex.value = -1
         }
 
-        for (path in paths) {
+        for (path in stubPaths) {
             openFile(path)
         }
     }

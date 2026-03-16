@@ -86,4 +86,5 @@ class SettingsRepository @Inject constructor(
 
     fun setUploadPath(profileId: String, path: String) =
         prefs.edit().putString("upload_path_$profileId", path).apply()
+
 }

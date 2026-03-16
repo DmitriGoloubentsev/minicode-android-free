@@ -312,8 +312,7 @@ class SshSessionManager @Inject constructor() {
                 disconnect(sessionId)
             }
 
-            // Set up sessio auto-attach before start() so the callback is ready
-            // when sessio detection fires during initial output reading
+            // Set up sessio callback before start() so detection fires during initial output
             val savedSessioName = handle.attachedSessioSession
             if (savedSessioName != null) {
                 newBridge.onSessioDetected = { sessions ->
@@ -322,8 +321,16 @@ class SshSessionManager @Inject constructor() {
                         Log.d(TAG, "Auto-attached to sessio session: $savedSessioName (session=$sessionId)")
                     } else {
                         handle.attachedSessioSession = null
+                        // Store pending sessions so picker can be shown when user switches to this tab
+                        handle.pendingSessioSessions = sessions
                         Log.d(TAG, "Sessio session $savedSessioName no longer exists (session=$sessionId)")
                     }
+                }
+            } else {
+                // No saved sessio name — store detected sessions for later picker display
+                newBridge.onSessioDetected = { sessions ->
+                    handle.pendingSessioSessions = sessions
+                    Log.d(TAG, "Sessio sessions detected for session=$sessionId (no saved name, pending picker)")
                 }
             }
 

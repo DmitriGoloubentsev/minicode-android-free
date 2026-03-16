@@ -17,4 +17,6 @@ data class SessionHandle(
     val hasActiveOutput: MutableStateFlow<Boolean> = MutableStateFlow(false),
     /** Sessio session this tab is attached to (in-memory, per-tab). */
     var attachedSessioSession: String? = null,
+    /** Pending sessio sessions detected but not yet shown to user (for non-active tabs). */
+    var pendingSessioSessions: List<com.minicode.service.terminal.SessioDetector.SessioSession>? = null,
 )

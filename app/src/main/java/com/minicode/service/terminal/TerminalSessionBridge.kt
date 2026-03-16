@@ -14,16 +14,30 @@ import java.io.OutputStream
 private const val TAG = "TerminalSessionBridge"
 
 class TerminalSessionBridge(
-    private val shellChannel: ChannelShell,
+    private val shellChannel: ChannelShell?,
     val emulator: TerminalEmulator,
     private val scope: CoroutineScope,
 ) {
+    val isDisconnected: Boolean get() = shellChannel == null
+
+    companion object {
+        /** Create a placeholder bridge with no SSH channel for session restore */
+        fun createDisconnected(cols: Int, rows: Int): TerminalSessionBridge {
+            val emulator = TerminalEmulator(cols, rows)
+            val scope = CoroutineScope(Dispatchers.IO)
+            return TerminalSessionBridge(null, emulator, scope)
+        }
+    }
+
     private var readerJob: Job? = null
-    private val outputStream: OutputStream = shellChannel.invertedIn
-    private val inputStream: InputStream = shellChannel.invertedOut
+    private val outputStream: OutputStream? = shellChannel?.invertedIn
+    private val inputStream: InputStream? = shellChannel?.invertedOut
 
     var onDisconnect: (() -> Unit)? = null
     var onOutput: (() -> Unit)? = null
+    var onSessioDetected: ((List<SessioDetector.SessioSession>) -> Unit)? = null
+
+    val sessioDetector = SessioDetector()
 
     // Normal mode uses extended rows; alt buffer uses actual screen rows
     var extendedRows = 500
@@ -38,20 +52,41 @@ class TerminalSessionBridge(
     private var lastSentRows = emulator.rows
 
     fun start() {
+        if (shellChannel == null) return
+        sessioDetector.start()
+
         emulator.onAltBufferChanged = { isAlt ->
             handleAltBufferChanged(isAlt)
         }
 
         readerJob = scope.launch(Dispatchers.IO) {
             val buffer = ByteArray(8192)
+            val lineBuffer = StringBuilder()
             try {
                 while (isActive && shellChannel.isOpen) {
-                    val n = inputStream.read(buffer)
+                    val n = inputStream!!.read(buffer)
                     if (n < 0) {
                         Log.d(TAG, "Read returned EOF (-1), shell exited")
                         break
                     }
                     if (n > 0) {
+                        // Feed lines to sessio detector while it's active
+                        if (!sessioDetector.isDone) {
+                            val text = String(buffer, 0, n, Charsets.UTF_8)
+                            for (ch in text) {
+                                if (ch == '\n' || ch == '\r') {
+                                    if (lineBuffer.isNotEmpty()) {
+                                        val detected = sessioDetector.onLine(lineBuffer.toString())
+                                        lineBuffer.clear()
+                                        if (detected != null) {
+                                            onSessioDetected?.invoke(detected)
+                                        }
+                                    }
+                                } else {
+                                    lineBuffer.append(ch)
+                                }
+                            }
+                        }
                         emulator.processBytes(buffer, 0, n)
                         onOutput?.invoke()
                     }
@@ -79,6 +114,7 @@ class TerminalSessionBridge(
     }
 
     fun writeBytes(data: ByteArray) {
+        if (shellChannel == null) return
         val now = System.currentTimeMillis()
         if (now - lastInputTime > idleThresholdMs) {
             Log.d(TAG, "Idle >60s, forcing resize ${actualCols}x${actualRows}")
@@ -87,8 +123,8 @@ class TerminalSessionBridge(
         lastInputTime = now
         scope.launch(Dispatchers.IO) {
             try {
-                outputStream.write(data)
-                outputStream.flush()
+                outputStream?.write(data)
+                outputStream?.flush()
             } catch (_: IOException) {
                 // Connection lost
             }
@@ -133,6 +169,7 @@ class TerminalSessionBridge(
     }
 
     private fun sendWindowChange(cols: Int, rows: Int) {
+        if (shellChannel == null) return
         lastSentCols = cols
         lastSentRows = rows
         scope.launch(Dispatchers.IO) {
@@ -148,7 +185,7 @@ class TerminalSessionBridge(
     fun stop() {
         readerJob?.cancel()
         try {
-            shellChannel.close()
+            shellChannel?.close()
         } catch (_: Exception) {
         }
     }

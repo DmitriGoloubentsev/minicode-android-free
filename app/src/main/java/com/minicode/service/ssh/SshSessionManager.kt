@@ -58,7 +58,7 @@ class SshSessionManager @Inject constructor() {
 
     private class SessionEntry(
         val handle: SessionHandle,
-        val sshSession: ClientSession,
+        var sshSession: ClientSession?,
     )
 
     private fun getOrCreateClient(): SshClient {
@@ -241,12 +241,152 @@ class SshSessionManager @Inject constructor() {
             return sessions[activeId]?.handle?.bridge
         }
 
+    /** Create a disconnected placeholder session for restore after app kill */
+    fun addPlaceholderSession(
+        sessionId: String,
+        profileId: String,
+        label: String,
+        cols: Int,
+        rows: Int,
+    ): SessionHandle {
+        val bridge = TerminalSessionBridge.createDisconnected(cols, rows)
+        val handle = SessionHandle(
+            id = sessionId,
+            profileId = profileId,
+            label = MutableStateFlow(label),
+            bridge = bridge,
+            state = MutableStateFlow(SshSessionState.DISCONNECTED),
+        )
+        sessions[sessionId] = SessionEntry(handle, null)
+        synchronized(sessionOrder) { sessionOrder.add(sessionId) }
+        publishSessionList()
+        return handle
+    }
+
+    /** Replace a placeholder session's bridge with a real SSH connection */
+    suspend fun reconnectSession(
+        sessionId: String,
+        profile: ConnectionProfile,
+        password: String?,
+        privateKey: String?,
+        passphrase: String?,
+        cols: Int,
+        rows: Int,
+        scope: CoroutineScope,
+    ): SessionHandle = withContext(Dispatchers.IO) {
+        val entry = sessions[sessionId] ?: throw IllegalStateException("Session $sessionId not found")
+        val handle = entry.handle
+        handle.state.value = SshSessionState.CONNECTING
+
+        try {
+            Log.d(TAG, "Reconnecting ${profile.host}:${profile.port} (session=$sessionId)")
+            val sshClient = getOrCreateClient()
+            val sess = sshClient.connect(profile.username, profile.host, profile.port)
+                .verify(15, TimeUnit.SECONDS)
+                .session
+
+            configureTcpPersistence(sess)
+            handle.state.value = SshSessionState.AUTHENTICATING
+
+            when (profile.authType) {
+                AuthType.PASSWORD -> sess.addPasswordIdentity(password ?: "")
+                AuthType.PRIVATE_KEY -> {
+                    if (privateKey != null) {
+                        sess.addPublicKeyIdentity(loadKeyPair(privateKey, passphrase))
+                    }
+                }
+            }
+            sess.auth().verify(15, TimeUnit.SECONDS)
+
+            val channel = sess.createShellChannel()
+            channel.setPtyType("xterm-256color")
+            channel.setPtyColumns(cols)
+            channel.setPtyLines(rows)
+            channel.setPtyWidth(0)
+            channel.setPtyHeight(0)
+            channel.open().verify(10, TimeUnit.SECONDS)
+
+            val emulator = TerminalEmulator(cols, rows)
+            val newBridge = TerminalSessionBridge(channel, emulator, scope)
+            newBridge.onDisconnect = {
+                disconnect(sessionId)
+            }
+
+            // Set up sessio auto-attach before start() so the callback is ready
+            // when sessio detection fires during initial output reading
+            val savedSessioName = handle.attachedSessioSession
+            if (savedSessioName != null) {
+                newBridge.onSessioDetected = { sessions ->
+                    if (sessions.any { it.name == savedSessioName }) {
+                        newBridge.writeBytes("sessio attach $savedSessioName\n".toByteArray())
+                        Log.d(TAG, "Auto-attached to sessio session: $savedSessioName (session=$sessionId)")
+                    } else {
+                        handle.attachedSessioSession = null
+                        Log.d(TAG, "Sessio session $savedSessioName no longer exists (session=$sessionId)")
+                    }
+                }
+            }
+
+            newBridge.start()
+
+            if (!profile.startupCommand.isNullOrBlank()) {
+                newBridge.writeBytes((profile.startupCommand + "\n").toByteArray(Charsets.UTF_8))
+            } else if (!profile.initialDirectory.isNullOrBlank()) {
+                newBridge.writeBytes(("cd ${profile.initialDirectory}\n").toByteArray(Charsets.UTF_8))
+            }
+
+            // Update the entry with the real SSH session and bridge
+            entry.sshSession = sess
+            handle.bridge = newBridge
+
+            // Bind title change
+            emulator.onTitleChanged = { title ->
+                handle.label.value = title
+            }
+
+            // Track output activity
+            newBridge.onOutput = {
+                if (!handle.hasActiveOutput.value) {
+                    handle.hasActiveOutput.value = true
+                }
+                if (sessionId != _activeSessionId.value && !handle.hasUnreadOutput) {
+                    handle.hasUnreadOutput = true
+                    publishSessionList()
+                }
+                idleTimers[sessionId]?.cancel(false)
+                idleTimers[sessionId] = idleScheduler.schedule({
+                    handle.hasActiveOutput.value = false
+                }, 2, TimeUnit.SECONDS)
+            }
+
+            handle.state.value = SshSessionState.CONNECTED
+            if (_activeSessionId.value == sessionId) {
+                _state.value = SshSessionState.CONNECTED
+            }
+            publishSessionList()
+            Log.d(TAG, "Reconnected successfully (session=$sessionId)")
+
+            handle
+        } catch (e: Exception) {
+            Log.e(TAG, "Reconnection failed for session $sessionId", e)
+            handle.state.value = SshSessionState.ERROR
+            if (_activeSessionId.value == sessionId) {
+                _state.value = SshSessionState.ERROR
+                _error.value = e.message ?: "Reconnection failed"
+            }
+            throw e
+        }
+    }
+
+    /** Get session IDs in tab order */
+    fun getSessionOrder(): List<String> = synchronized(sessionOrder) { sessionOrder.toList() }
+
     fun disconnect(sessionId: String) {
         val entry = sessions.remove(sessionId) ?: return
         synchronized(sessionOrder) { sessionOrder.remove(sessionId) }
         idleTimers.remove(sessionId)?.cancel(false)
         entry.handle.bridge.stop()
-        try { entry.sshSession.close() } catch (_: Exception) {}
+        try { entry.sshSession?.close() } catch (_: Exception) {}
         entry.handle.state.value = SshSessionState.DISCONNECTED
 
         if (_activeSessionId.value == sessionId) {
@@ -270,7 +410,7 @@ class SshSessionManager @Inject constructor() {
     fun isConnected(): Boolean {
         val activeId = _activeSessionId.value ?: return false
         val entry = sessions[activeId] ?: return false
-        return entry.sshSession.isOpen
+        return entry.sshSession?.isOpen == true
     }
 
     fun getSessionCount(): Int = sessions.size

@@ -129,6 +129,96 @@ class WorkspaceViewModel @Inject constructor(
 
     fun cancelPasswordRequest() {
         _passwordRequest.value = null
+        // Process next queued reconnect password request
+        processNextPasswordRequest()
+    }
+
+    // Queue for reconnect password requests
+    private val passwordRequestQueue = mutableListOf<Pair<String, ConnectionProfile>>()
+
+    private fun processNextPasswordRequest() {
+        if (_passwordRequest.value != null) return
+        val next = passwordRequestQueue.removeFirstOrNull() ?: return
+        _passwordRequest.value = PasswordRequest(next.first, next.second)
+    }
+
+    /** Reconnect a single placeholder session */
+    fun reconnectSession(sessionId: String, cols: Int, rows: Int) {
+        val handle = sessionManager.getSessionHandle(sessionId) ?: return
+        viewModelScope.launch {
+            val prof = repository.getProfileById(handle.profileId)
+            if (prof == null) {
+                Log.w(TAG, "Profile ${handle.profileId} deleted, removing session $sessionId")
+                sessionManager.disconnect(sessionId)
+                return@launch
+            }
+            profileCache[handle.profileId] = prof
+
+            val password = repository.getPassword(handle.profileId)
+            val privateKey = repository.getPrivateKey(handle.profileId)
+            val passphrase = repository.getPassphrase(handle.profileId)
+
+            if (prof.authType == AuthType.PASSWORD && password.isNullOrEmpty()) {
+                // Queue password prompt
+                passwordRequestQueue.add(Pair(sessionId, prof))
+                processNextPasswordRequest()
+                return@launch
+            }
+
+            try {
+                val reconnected = sessionManager.reconnectSession(
+                    sessionId = sessionId,
+                    profile = prof,
+                    password = password,
+                    privateKey = privateKey,
+                    passphrase = passphrase,
+                    cols = cols,
+                    rows = rows,
+                    scope = viewModelScope,
+                )
+                if (sessionManager.activeSessionId.value == sessionId) {
+                    _bridge.value = reconnected.bridge
+                }
+                repository.updateLastUsed(handle.profileId)
+            } catch (e: Exception) {
+                Log.e(TAG, "Reconnect failed for session $sessionId", e)
+            }
+        }
+    }
+
+    /** Connect with a user-provided password for a reconnecting session */
+    fun connectReconnectWithPassword(password: String) {
+        val request = _passwordRequest.value ?: return
+        _passwordRequest.value = null
+        // Find the session that's waiting for this password
+        val sessionId = sessionManager.getAllSessions()
+            .firstOrNull { it.profileId == request.profileId && it.bridge.isDisconnected }
+            ?.id
+        if (sessionId != null) {
+            viewModelScope.launch {
+                try {
+                    val reconnected = sessionManager.reconnectSession(
+                        sessionId = sessionId,
+                        profile = request.profile,
+                        password = password,
+                        privateKey = null,
+                        passphrase = null,
+                        cols = lastCols,
+                        rows = lastRows,
+                        scope = viewModelScope,
+                    )
+                    if (sessionManager.activeSessionId.value == sessionId) {
+                        _bridge.value = reconnected.bridge
+                    }
+                    repository.updateLastUsed(request.profileId)
+                } catch (_: Exception) {
+                }
+                processNextPasswordRequest()
+            }
+        } else {
+            // Fallback to normal connect
+            connectWithPassword(password)
+        }
     }
 
     fun switchSession(sessionId: String) {

@@ -47,6 +47,7 @@ import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import com.minicode.R
+import com.minicode.data.repository.SessionStateRepository
 import com.minicode.data.repository.SettingsRepository
 import com.minicode.service.SshConnectionService
 import com.minicode.model.SshSessionState
@@ -62,6 +63,7 @@ import com.minicode.viewmodel.EditorViewModel
 import com.minicode.viewmodel.FileTreeViewModel
 import com.minicode.viewmodel.WorkspaceViewModel
 import com.minicode.service.speech.SherpaRecognizer
+import com.minicode.service.terminal.SessioDetector
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.Job
@@ -76,6 +78,7 @@ private const val SPLIT_MIN_WIDTH_DP = 600
 class WorkspaceActivity : AppCompatActivity() {
 
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var sessionStateRepository: SessionStateRepository
     @Inject lateinit var sherpaRecognizer: SherpaRecognizer
 
     private val viewModel: WorkspaceViewModel by viewModels()
@@ -181,6 +184,9 @@ class WorkspaceActivity : AppCompatActivity() {
     )
     private val sessionLayouts = HashMap<String, LayoutState>()
 
+    private var isRestoreMode = false
+    private var userClosedAllSessions = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate")
@@ -208,20 +214,117 @@ class WorkspaceActivity : AppCompatActivity() {
         setupAll()
 
         if (savedInstanceState == null) {
-            terminalView.viewTreeObserver.addOnGlobalLayoutListener(
-                object : ViewTreeObserver.OnGlobalLayoutListener {
-                    override fun onGlobalLayout() {
-                        terminalView.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                        if (!hasInitialized) {
-                            hasInitialized = true
-                            val cols = terminalView.calculateColumns()
-                            val rows = terminalView.calculateRows()
-                            Log.d(TAG, "Terminal size: ${cols}x${rows}")
-                            viewModel.connect(profileId!!, cols.coerceAtLeast(20), rows.coerceAtLeast(5))
+            val savedState = sessionStateRepository.load()
+            if (savedState != null) {
+                // Restore mode — recreate tabs from saved state
+                isRestoreMode = true
+                terminalView.viewTreeObserver.addOnGlobalLayoutListener(
+                    object : ViewTreeObserver.OnGlobalLayoutListener {
+                        override fun onGlobalLayout() {
+                            terminalView.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                            if (!hasInitialized) {
+                                hasInitialized = true
+                                restoreSavedSessions(savedState)
+                            }
                         }
                     }
-                }
+                )
+            } else {
+                // Normal mode — connect single profile
+                terminalView.viewTreeObserver.addOnGlobalLayoutListener(
+                    object : ViewTreeObserver.OnGlobalLayoutListener {
+                        override fun onGlobalLayout() {
+                            terminalView.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                            if (!hasInitialized) {
+                                hasInitialized = true
+                                val cols = terminalView.calculateColumns()
+                                val rows = terminalView.calculateRows()
+                                Log.d(TAG, "Terminal size: ${cols}x${rows}")
+                                viewModel.connect(profileId!!, cols.coerceAtLeast(20), rows.coerceAtLeast(5))
+                            }
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    private fun restoreSavedSessions(savedState: SessionStateRepository.SavedSessionState) {
+        val cols = terminalView.calculateColumns().coerceAtLeast(20)
+        val rows = terminalView.calculateRows().coerceAtLeast(5)
+        Log.e(TAG, "Restoring ${savedState.sessions.size} sessions")
+
+        val restoredIds = mutableListOf<String>()
+
+        for (saved in savedState.sessions) {
+            val sessionId = java.util.UUID.randomUUID().toString()
+            val handle = viewModel.sessionManager.addPlaceholderSession(
+                sessionId = sessionId,
+                profileId = saved.profileId,
+                label = saved.label,
+                cols = cols,
+                rows = rows,
             )
+            handle.attachedSessioSession = saved.sessioSessionName
+
+            // Restore layout state
+            sessionLayouts[sessionId] = LayoutState(
+                fileTreeWidthRatio = saved.layout.fileTreeWidthRatio,
+                editorHeightRatio = saved.layout.editorHeightRatio,
+                fileTreeVisible = saved.layout.fileTreeVisible,
+                editorVisible = saved.layout.editorVisible,
+                activePanel = saved.layout.activePanel,
+                showingEditor = saved.layout.showingEditor,
+            )
+
+            // Restore editor tabs (stubs — content loaded after reconnect)
+            if (saved.editorTabs.isNotEmpty()) {
+                editorViewModel.restoreSessionTabs(
+                    sessionKey = sessionId,
+                    tabs = saved.editorTabs.map { Pair(it.filePath, it.languageId) },
+                    activeIndex = saved.activeEditorTabIndex,
+                )
+            }
+
+            // Restore file tree path
+            if (saved.fileTreePath.isNotEmpty()) {
+                fileTreeViewModel.restoreSessionPath(sessionId, saved.fileTreePath)
+            }
+
+            restoredIds.add(sessionId)
+        }
+
+        if (restoredIds.isEmpty()) {
+            // All profiles were deleted, fall back to normal connect
+            viewModel.connect(profileId!!, cols, rows)
+            return
+        }
+
+        // Set active session
+        val activeIdx = savedState.activeIndex.coerceIn(0, restoredIds.size - 1)
+        val activeId = restoredIds[activeIdx]
+        viewModel.sessionManager.setActive(activeId)
+        viewModel.switchSession(activeId)
+
+        // Attach terminal view to active placeholder
+        val activeHandle = viewModel.sessionManager.getSessionHandle(activeId)
+        if (activeHandle != null) {
+            terminalView.emulator = activeHandle.bridge.emulator
+            restoreLayoutState(activeId)
+            if (isSplitMode) applySplitVisibility()
+        }
+
+        // Auto-reconnect each session
+        for (sessionId in restoredIds) {
+            viewModel.reconnectSession(sessionId, cols, rows)
+        }
+
+        // Check if the intent's profileId is already among restored sessions
+        val intentProfileId = profileId
+        val alreadyRestored = savedState.sessions.any { it.profileId == intentProfileId }
+        if (!alreadyRestored && intentProfileId != null) {
+            // The user tapped a NEW connection — add it as an extra tab
+            viewModel.connect(intentProfileId, cols, rows)
         }
     }
 
@@ -233,6 +336,13 @@ class WorkspaceActivity : AppCompatActivity() {
         outState.putString("activePanel", activePanel)
         outState.putBoolean("fileTreeVisible", fileTreeVisible)
         outState.putBoolean("editorVisible", editorVisible)
+        persistSessionState()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        Log.e(TAG, "onStop: persisting session state")
+        persistSessionState()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -416,6 +526,70 @@ class WorkspaceActivity : AppCompatActivity() {
         }
     }
 
+    /** Persist all session state to SharedPreferences for restore after app kill */
+    private fun persistSessionState() {
+        val allSessions = viewModel.sessionManager.getAllSessions()
+        Log.e(TAG, "persistSessionState: ${allSessions.size} sessions, labels=${allSessions.map { it.label.value }}")
+        if (allSessions.isEmpty()) {
+            sessionStateRepository.clear()
+            return
+        }
+
+        // Flush active session's layout to HashMap
+        val currentId = viewModel.activeSessionId.value
+        if (currentId != null) {
+            saveLayoutState(currentId)
+        }
+
+        // Also flush active editor/file-tree state
+        val activeEditorKey = viewModel.activeSessionId.value
+        if (activeEditorKey != null) {
+            editorViewModel.switchSession(activeEditorKey) // no-op if same, but saves state
+            fileTreeViewModel.switchSession(activeEditorKey)
+        }
+
+        val sessionOrder = viewModel.sessionManager.getSessionOrder()
+        val activeIndex = if (currentId != null) sessionOrder.indexOf(currentId).coerceAtLeast(0) else 0
+
+        val savedSessions = allSessions.map { handle ->
+            val layout = sessionLayouts[handle.id]
+            val savedLayout = SessionStateRepository.SavedLayoutState(
+                fileTreeWidthRatio = layout?.fileTreeWidthRatio ?: 0.25f,
+                editorHeightRatio = layout?.editorHeightRatio ?: 0.55f,
+                fileTreeVisible = layout?.fileTreeVisible ?: true,
+                editorVisible = layout?.editorVisible ?: false,
+                activePanel = layout?.activePanel ?: "terminal",
+                showingEditor = layout?.showingEditor ?: false,
+            )
+            val editorTabs = editorViewModel.getSessionTabs(handle.id).map { tab ->
+                SessionStateRepository.SavedEditorTab(
+                    filePath = tab.filePath,
+                    fileName = tab.fileName,
+                    languageId = tab.languageId,
+                )
+            }
+            val editorActiveIdx = editorViewModel.getSessionActiveTabIndex(handle.id)
+            val fileTreePath = fileTreeViewModel.getSessionPath(handle.id)
+
+            SessionStateRepository.SavedSession(
+                profileId = handle.profileId,
+                label = handle.label.value,
+                sessioSessionName = handle.attachedSessioSession,
+                layout = savedLayout,
+                editorTabs = editorTabs,
+                activeEditorTabIndex = editorActiveIdx,
+                fileTreePath = fileTreePath,
+            )
+        }
+
+        sessionStateRepository.save(
+            SessionStateRepository.SavedSessionState(
+                sessions = savedSessions,
+                activeIndex = activeIndex,
+            )
+        )
+    }
+
     /** Force-switch to a session even if it's already the active ID.
      *  Used when a session was removed and we need to refresh the terminal view. */
     private fun forceSwitch(sessionId: String) {
@@ -434,6 +608,9 @@ class WorkspaceActivity : AppCompatActivity() {
                 runOnUiThread { fileTreeViewModel.navigateTo(path) }
             }
             handle.bridge.emulator.onBell = { handleTerminalBell() }
+            handle.bridge.onSessioDetected = { sessions ->
+                runOnUiThread { handleSessioDetected(sessions, handle) }
+            }
             terminalView.invalidate()
         }
         val tabs = editorViewModel.tabs.value
@@ -481,6 +658,9 @@ class WorkspaceActivity : AppCompatActivity() {
                 runOnUiThread { fileTreeViewModel.navigateTo(path) }
             }
             handle.bridge.emulator.onBell = { handleTerminalBell() }
+            handle.bridge.onSessioDetected = { sessions ->
+                runOnUiThread { handleSessioDetected(sessions, handle) }
+            }
             terminalView.invalidate()
         }
 
@@ -489,7 +669,9 @@ class WorkspaceActivity : AppCompatActivity() {
         val activeIdx = editorViewModel.activeTabIndex.value
         editorPanel.updateTabs(tabs, activeIdx)
 
-        // Update file tree
+        // Update file tree — initialize SFTP if needed (e.g. after restore/reconnect)
+        fileTreeViewModel.initialize()
+        editorViewModel.initialize()
         fileTreePanel.updateNodes(fileTreeViewModel.visibleNodes.value)
         fileTreePanel.updatePath(fileTreeViewModel.currentPath.value)
 
@@ -536,6 +718,7 @@ class WorkspaceActivity : AppCompatActivity() {
                 viewModel.disconnectSession(sessionId)
                 // If no sessions left, finish
                 if (viewModel.sessionManager.getSessionCount() == 0) {
+                    userClosedAllSessions = true
                     finish()
                 } else {
                     // Switch to new active session
@@ -881,21 +1064,21 @@ class WorkspaceActivity : AppCompatActivity() {
         val savedPath = profileId?.let { settingsRepository.getUploadPath(it) }
         val defaultPath = savedPath ?: fileTreeViewModel.currentPath.value.ifEmpty { "/tmp" }
 
-        val input = TextInputEditText(this).apply {
+        val dp = resources.displayMetrics.density
+        val layout = com.google.android.material.textfield.TextInputLayout(this).apply {
+            hint = "Upload destination path"
+            boxBackgroundMode = com.google.android.material.textfield.TextInputLayout.BOX_BACKGROUND_OUTLINE
+            setPadding((24 * dp).toInt(), (8 * dp).toInt(), (24 * dp).toInt(), 0)
+        }
+        val input = TextInputEditText(layout.context).apply {
             setText(defaultPath)
             setSelection(text?.length ?: 0)
-            setPadding(
-                (24 * resources.displayMetrics.density).toInt(),
-                (16 * resources.displayMetrics.density).toInt(),
-                (24 * resources.displayMetrics.density).toInt(),
-                0
-            )
         }
+        layout.addView(input)
 
         MaterialAlertDialogBuilder(this)
             .setTitle(title)
-            .setMessage("Upload destination path:")
-            .setView(input)
+            .setView(layout)
             .setPositiveButton("Choose File") { _, _ ->
                 val path = input.text?.toString()?.trim() ?: "/tmp"
                 if (profileId != null) settingsRepository.setUploadPath(profileId, path)
@@ -2166,6 +2349,12 @@ class WorkspaceActivity : AppCompatActivity() {
                     bridge.emulator.onBell = {
                         handleTerminalBell()
                     }
+                    bridge.onSessioDetected = { sessions ->
+                        val activeHandle = viewModel.sessionManager.getActiveSession()
+                        if (activeHandle != null) {
+                            runOnUiThread { handleSessioDetected(sessions, activeHandle) }
+                        }
+                    }
                     // Set up git service for editor
                     viewModel.sessionManager.getSession()?.let { session ->
                         editorPanel.gitService = com.minicode.service.git.GitService(session)
@@ -2329,6 +2518,8 @@ class WorkspaceActivity : AppCompatActivity() {
                     statusDrawable?.setColor(getColor(R.color.dark_text_secondary))
                     overlayConnecting.visibility = View.GONE
                     stopService(Intent(this, SshConnectionService::class.java))
+                    // If connection was lost unexpectedly and battery optimization is on, suggest disabling
+                    promptBatteryOptimization()
                 }
                 SshSessionState.CONNECTING -> {
                     statusDrawable?.setColor(getColor(R.color.warning))
@@ -2408,6 +2599,7 @@ class WorkspaceActivity : AppCompatActivity() {
                 .setMessage("Close this SSH session?")
                 .setPositiveButton("Disconnect") { _, _ ->
                     viewModel.disconnect()
+                    userClosedAllSessions = true
                     finish()
                 }
                 .setNegativeButton("Cancel", null)
@@ -2442,12 +2634,17 @@ class WorkspaceActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        Log.d(TAG, "onDestroy: isFinishing=$isFinishing isChangingConfigurations=$isChangingConfigurations")
+        Log.e(TAG, "onDestroy: isFinishing=$isFinishing isChangingConfigurations=$isChangingConfigurations sessionCount=${viewModel.sessionManager.getSessionCount()}")
         destroySpeechRecognizer()
         sherpaRecognizer.cancelRecording()
         editorPanel.release()
         super.onDestroy()
         if (isFinishing) {
+            // Only clear saved state if user explicitly closed all sessions.
+            // Do NOT clear on phone shutdown/reboot — isFinishing is true there too.
+            if (userClosedAllSessions) {
+                sessionStateRepository.clear()
+            }
             viewModel.sessionManager.shutdown()
         }
     }
@@ -2459,5 +2656,48 @@ class WorkspaceActivity : AppCompatActivity() {
         } else {
             confirmDisconnect()
         }
+    }
+
+    // ── Sessio integration ──────────────────────────────────────────────
+
+    private fun handleSessioDetected(
+        sessions: List<SessioDetector.SessioSession>,
+        handle: com.minicode.model.SessionHandle,
+    ) {
+        if (sessions.isEmpty()) return
+        val attached = handle.attachedSessioSession
+
+        if (attached != null && sessions.any { it.name == attached }) {
+            // Reconnecting a tab that was previously attached — auto-attach
+            handle.bridge.writeBytes("sessio attach $attached\n".toByteArray())
+            Toast.makeText(this, "Reconnected to $attached", Toast.LENGTH_SHORT).show()
+            persistSessionState()
+        } else {
+            // New tab or previous session no longer exists — show picker
+            handle.attachedSessioSession = null
+            showSessioPicker(sessions, handle)
+        }
+    }
+
+    private fun showSessioPicker(
+        sessions: List<SessioDetector.SessioSession>,
+        handle: com.minicode.model.SessionHandle,
+    ) {
+        val items = sessions.map { s ->
+            if (s.cwd != null) "${s.name}  ${s.cwd}" else s.name
+        }.toTypedArray()
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Connect to session")
+            .setItems(items) { _, which ->
+                val chosen = sessions[which]
+                handle.attachedSessioSession = chosen.name
+                handle.bridge.writeBytes("sessio attach ${chosen.name}\n".toByteArray())
+                persistSessionState()
+            }
+            .setNegativeButton("Skip") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .show()
     }
 }

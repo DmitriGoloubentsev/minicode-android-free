@@ -15,9 +15,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.NavHostFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.minicode.R
+import com.minicode.data.repository.SessionStateRepository
 import com.minicode.data.repository.SettingsRepository
+import com.minicode.ui.workspace.WorkspaceActivity
 import com.minicode.service.Changelog
 import com.minicode.service.UpdateChecker
+import com.minicode.service.speech.DownloadState
 import com.minicode.service.speech.ModelDownloadManager
 import com.minicode.ui.settings.SettingsActivity
 import dagger.hilt.android.AndroidEntryPoint
@@ -28,12 +31,30 @@ import javax.inject.Inject
 class ConnectionActivity : AppCompatActivity() {
 
     @Inject lateinit var settingsRepository: SettingsRepository
+    @Inject lateinit var sessionStateRepository: SessionStateRepository
     @Inject lateinit var modelDownloadManager: ModelDownloadManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_connection)
+
+        // Check for saved sessions — if app was killed with active sessions, restore them
+        if (savedInstanceState == null && !intent.getBooleanExtra("open_form", false)) {
+            val savedState = sessionStateRepository.load()
+            android.util.Log.e("ConnectionActivity", "Restore check: savedState=${savedState != null}, sessions=${savedState?.sessions?.size ?: 0}")
+            if (savedState != null && savedState.sessions.isNotEmpty()) {
+                // Launch WorkspaceActivity with the first saved session's profileId
+                // WorkspaceActivity.onCreate will detect saved sessions and restore all tabs
+                val firstProfileId = savedState.sessions.first().profileId
+                android.util.Log.e("ConnectionActivity", "Restoring sessions, launching WorkspaceActivity with profileId=$firstProfileId")
+                startActivity(Intent(this, WorkspaceActivity::class.java).apply {
+                    putExtra("profile_id", firstProfileId)
+                })
+                finish()
+                return
+            }
+        }
 
         // Handle keyboard insets — apply bottom padding so ScrollView can scroll above keyboard
         val rootView = findViewById<View>(R.id.nav_host_fragment)
@@ -135,6 +156,8 @@ class ConnectionActivity : AppCompatActivity() {
     }
 
     private fun suggestParakeetDownload() {
+        // Skip on builds without Parakeet support (foss, playFree)
+        if (modelDownloadManager.state.value is DownloadState.NotAvailable) return
         // Only suggest once, and only if model is not already downloaded
         val prefs = getSharedPreferences("update", MODE_PRIVATE)
         if (prefs.getBoolean("parakeet_suggested", false)) return

@@ -91,6 +91,21 @@ class FileTreeViewModel @Inject constructor(
         restoreState(sessionKey)
     }
 
+    /** Restore saved path for a session (navigated to after reconnect) */
+    fun restoreSessionPath(sessionKey: String, path: String) {
+        val state = sessionStates.getOrPut(sessionKey) { SessionState() }
+        state.currentPath = path
+    }
+
+    /** Get current path for a session (for persistence) */
+    fun getSessionPath(sessionKey: String): String {
+        return if (sessionKey == activeSessionKey) {
+            _currentPath.value
+        } else {
+            sessionStates[sessionKey]?.currentPath ?: ""
+        }
+    }
+
     fun removeSession(sessionKey: String) {
         val state = sessionStates.remove(sessionKey)
         if (state?.sftpService != null) {
@@ -107,16 +122,28 @@ class FileTreeViewModel @Inject constructor(
             switchSession(currentKey)
         }
         val sessionId = System.identityHashCode(session).toLong()
-        if (sftpService != null && sessionId == lastSessionId) return
+        if (sftpService != null && sessionId == lastSessionId) {
+            // SFTP already initialized — but load directory if nodes are empty
+            // (e.g. restored session that hasn't loaded its file tree yet)
+            if (_visibleNodes.value.isEmpty() && _currentPath.value.isNotEmpty()) {
+                loadDirectory(_currentPath.value)
+            }
+            return
+        }
         lastSessionId = sessionId
         val oldSftp = sftpService
         if (oldSftp != null) {
             viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { oldSftp.close() }
         }
         sftpService = SftpService(session)
-        // Load home directory for new sessions that have no saved path
-        if (isNewSession || _currentPath.value.isEmpty()) {
-            loadHomeDirectory()
+        // Load directory for new sessions: use saved path if available, else home
+        if (isNewSession || _currentPath.value.isEmpty() || _visibleNodes.value.isEmpty()) {
+            val savedPath = _currentPath.value
+            if (savedPath.isNotEmpty()) {
+                loadDirectory(savedPath)
+            } else {
+                loadHomeDirectory()
+            }
         }
     }
 

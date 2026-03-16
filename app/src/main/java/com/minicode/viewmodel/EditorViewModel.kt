@@ -92,6 +92,53 @@ class EditorViewModel @Inject constructor(
         restoreState(sessionKey)
     }
 
+    /** Restore stub editor tabs for a session (paths only, content loaded after reconnect) */
+    fun restoreSessionTabs(sessionKey: String, tabs: List<Pair<String, String>>, activeIndex: Int) {
+        val state = sessionStates.getOrPut(sessionKey) { SessionState() }
+        state.tabs = tabs.map { (path, langId) ->
+            val fileName = path.substringAfterLast('/')
+            EditorTab(filePath = path, fileName = fileName, languageId = langId)
+        }
+        state.activeTabIndex = activeIndex
+    }
+
+    /** Reload file contents for restored tabs after SSH reconnect */
+    fun reloadRestoredTabs(sessionKey: String) {
+        val state = sessionStates[sessionKey] ?: return
+        val paths = state.tabs.map { it.filePath }
+        if (paths.isEmpty()) return
+
+        // Clear stubs so openFile can re-add them with content
+        state.tabs = emptyList()
+        state.activeTabIndex = -1
+        if (sessionKey == activeSessionKey) {
+            _tabs.value = emptyList()
+            _activeTabIndex.value = -1
+        }
+
+        for (path in paths) {
+            openFile(path)
+        }
+    }
+
+    /** Get editor tabs for a session (for persistence) */
+    fun getSessionTabs(sessionKey: String): List<EditorTab> {
+        return if (sessionKey == activeSessionKey) {
+            _tabs.value
+        } else {
+            sessionStates[sessionKey]?.tabs ?: emptyList()
+        }
+    }
+
+    /** Get active tab index for a session (for persistence) */
+    fun getSessionActiveTabIndex(sessionKey: String): Int {
+        return if (sessionKey == activeSessionKey) {
+            _activeTabIndex.value
+        } else {
+            sessionStates[sessionKey]?.activeTabIndex ?: -1
+        }
+    }
+
     fun removeSession(sessionKey: String) {
         val state = sessionStates.remove(sessionKey)
         if (state?.sftpService != null) {

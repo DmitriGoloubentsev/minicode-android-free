@@ -63,6 +63,7 @@ import com.minicode.viewmodel.EditorViewModel
 import com.minicode.viewmodel.FileTreeViewModel
 import com.minicode.viewmodel.WorkspaceViewModel
 import com.minicode.service.speech.SherpaRecognizer
+import com.minicode.service.terminal.BridgeDebugLog
 import com.minicode.service.terminal.SessioDetector
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -186,12 +187,14 @@ class WorkspaceActivity : AppCompatActivity() {
 
     private var isRestoreMode = false
     private var userClosedAllSessions = false
+    private var lastAutoReconnectSessionId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate")
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        BridgeDebugLog.init(this)
 
         profileId = intent.getStringExtra("profile_id")
         if (profileId == null) {
@@ -252,11 +255,17 @@ class WorkspaceActivity : AppCompatActivity() {
     private fun restoreSavedSessions(savedState: SessionStateRepository.SavedSessionState) {
         val cols = terminalView.calculateColumns().coerceAtLeast(20)
         val rows = terminalView.calculateRows().coerceAtLeast(5)
-        Log.e(TAG, "Restoring ${savedState.sessions.size} sessions")
+
+        // Clear saved state immediately to prevent accumulation on repeated kills
+        sessionStateRepository.clear()
+
+        // Safety: deduplicate by profileId+label, cap at 10 sessions
+        val dedupedSessions = savedState.sessions.distinctBy { "${it.profileId}|${it.label}" }.take(10)
+        Log.e(TAG, "Restoring ${dedupedSessions.size} sessions (raw=${savedState.sessions.size})")
 
         val restoredIds = mutableListOf<String>()
 
-        for (saved in savedState.sessions) {
+        for (saved in dedupedSessions) {
             val sessionId = java.util.UUID.randomUUID().toString()
             val handle = viewModel.sessionManager.addPlaceholderSession(
                 sessionId = sessionId,
@@ -787,6 +796,16 @@ class WorkspaceActivity : AppCompatActivity() {
                         com.minicode.ui.connection.ConnectionActivity::class.java,
                     ).putExtra("edit_profile_id", profileId))
                 }
+                onDelete = { profileId, label ->
+                    com.google.android.material.dialog.MaterialAlertDialogBuilder(this@WorkspaceActivity)
+                        .setTitle("Delete Connection")
+                        .setMessage("Delete \"$label\"?")
+                        .setPositiveButton("Delete") { _, _ ->
+                            connectionListViewModel.deleteProfile(profileId)
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
             }
             // Add below session tab bar by inserting into the main LinearLayout
             val mainLinear = sessionTabBar.parent as? ViewGroup
@@ -1022,6 +1041,8 @@ class WorkspaceActivity : AppCompatActivity() {
     }
 
     private fun showPasswordPrompt(request: WorkspaceViewModel.PasswordRequest) {
+        // Hide connecting overlay so user can interact with the dialog
+        overlayConnecting.visibility = View.GONE
         val inputLayout = TextInputLayout(this).apply {
             endIconMode = TextInputLayout.END_ICON_PASSWORD_TOGGLE
             setPadding(
@@ -2537,15 +2558,6 @@ class WorkspaceActivity : AppCompatActivity() {
                 }
             }
         }
-        // Auto-reconnect banner
-        launch {
-            viewModel.reconnecting.collect { reconnecting ->
-                if (reconnecting) {
-                    overlayConnecting.visibility = View.VISIBLE
-                    textConnectingStatus.text = "Reconnecting..."
-                }
-            }
-        }
     }
 
     private fun updateConnectionState(state: SshSessionState) {
@@ -2563,16 +2575,17 @@ class WorkspaceActivity : AppCompatActivity() {
                         stopService(Intent(this, SshConnectionService::class.java))
                     }
                     // Auto-reconnect the active session if it was dropped unexpectedly
+                    // Don't auto-reconnect if already attempted recently (prevents loops)
                     val activeId = viewModel.activeSessionId.value
                     val activeHandle = activeId?.let { viewModel.sessionManager.getSessionHandle(it) }
-                    if (activeHandle != null && activeHandle.bridge.isDisconnected && !userClosedAllSessions) {
+                    if (activeHandle != null && activeHandle.bridge.isDisconnected && !userClosedAllSessions
+                        && activeId != lastAutoReconnectSessionId) {
+                        lastAutoReconnectSessionId = activeId
                         val cols = terminalView.calculateColumns().coerceAtLeast(20)
                         val rows = terminalView.calculateRows().coerceAtLeast(5)
                         viewModel.reconnectSession(activeId, cols, rows)
-                        overlayConnecting.visibility = View.VISIBLE
-                        textConnectingStatus.text = "Reconnecting..."
+                        // Don't show overlay here — state flow (CONNECTING) will show it
                     }
-                    promptBatteryOptimization()
                 }
                 SshSessionState.CONNECTING -> {
                     statusDrawable?.setColor(getColor(R.color.warning))
@@ -2586,6 +2599,7 @@ class WorkspaceActivity : AppCompatActivity() {
                 SshSessionState.CONNECTED -> {
                     statusDrawable?.setColor(getColor(R.color.success))
                     overlayConnecting.visibility = View.GONE
+                    lastAutoReconnectSessionId = null // allow future auto-reconnect
                     terminalView.requestFocus()
                     val sessionCount = viewModel.sessionManager.getSessionCount()
                     val host = viewModel.profile.value?.host ?: ""
@@ -2598,7 +2612,13 @@ class WorkspaceActivity : AppCompatActivity() {
                 SshSessionState.ERROR -> {
                     statusDrawable?.setColor(getColor(R.color.error))
                     overlayConnecting.visibility = View.GONE
-                    stopService(Intent(this, SshConnectionService::class.java))
+                    // Only stop foreground service if no sessions are connected
+                    val anyStillConnected = viewModel.sessionManager.getAllSessions().any {
+                        it.state.value == SshSessionState.CONNECTED
+                    }
+                    if (!anyStillConnected) {
+                        stopService(Intent(this, SshConnectionService::class.java))
+                    }
                 }
             }
         } catch (e: Exception) {

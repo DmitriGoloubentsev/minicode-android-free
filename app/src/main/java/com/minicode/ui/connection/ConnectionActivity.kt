@@ -40,7 +40,8 @@ class ConnectionActivity : AppCompatActivity() {
         setContentView(R.layout.activity_connection)
 
         // Check for saved sessions — if app was killed with active sessions, restore them
-        if (savedInstanceState == null && !intent.getBooleanExtra("open_form", false)) {
+        if (savedInstanceState == null && !intent.getBooleanExtra("open_form", false)
+            && intent.getStringExtra("edit_profile_id") == null) {
             val savedState = sessionStateRepository.load()
             android.util.Log.e("ConnectionActivity", "Restore check: savedState=${savedState != null}, sessions=${savedState?.sessions?.size ?: 0}")
             if (savedState != null && savedState.sessions.isNotEmpty()) {
@@ -71,10 +72,14 @@ class ConnectionActivity : AppCompatActivity() {
         }
 
         // Navigate directly to form if requested; finish activity when form pops back
-        if (savedInstanceState == null && intent.getBooleanExtra("open_form", false)) {
+        val editProfileId = intent.getStringExtra("edit_profile_id")
+        if (savedInstanceState == null && (intent.getBooleanExtra("open_form", false) || editProfileId != null)) {
             val navHost = supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as? NavHostFragment
             val navController = navHost?.navController
-            navController?.navigate(R.id.action_list_to_form)
+            val args = if (editProfileId != null) {
+                android.os.Bundle().apply { putString("profile_id", editProfileId) }
+            } else null
+            navController?.navigate(R.id.action_list_to_form, args)
             navController?.addOnDestinationChangedListener { _, dest, _ ->
                 // When form pops back to list, finish instead
                 if (dest.id == R.id.connectionListFragment) {

@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.TextView
 import com.minicode.model.ConnectionProfile
@@ -21,6 +22,7 @@ class ConnectionListPanel @JvmOverloads constructor(
     var onConnect: ((profileId: String) -> Unit)? = null
     var onAddNew: (() -> Unit)? = null
     var onEdit: ((profileId: String) -> Unit)? = null
+    var onDelete: ((profileId: String, label: String) -> Unit)? = null
 
     private val density = context.resources.displayMetrics.density
     private val listContainer: LinearLayout
@@ -135,10 +137,6 @@ class ConnectionListPanel @JvmOverloads constructor(
                 cornerRadius = 8 * density
             }
             setOnClickListener { onConnect?.invoke(profile.id) }
-            setOnLongClickListener {
-                onEdit?.invoke(profile.id)
-                true
-            }
         }
 
         // Info section
@@ -170,14 +168,35 @@ class ConnectionListPanel @JvmOverloads constructor(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
         ))
 
-        // Connect arrow
-        val arrow = TextView(context).apply {
-            text = "▶"
-            textSize = 14f
-            setTextColor(0xFF4CAF50.toInt())
+        // Gear icon — tap for Edit/Delete popup menu
+        val gear = TextView(context).apply {
+            text = "\u2699"  // ⚙
+            textSize = 20f
+            setTextColor(0xFF888888.toInt())
             gravity = Gravity.CENTER
+            val touchPad = (8 * density).toInt()
+            setPadding(touchPad, touchPad, touchPad, touchPad)
+            setOnClickListener { anchor ->
+                val popup = PopupMenu(context, anchor)
+                popup.menu.apply {
+                    add(0, 1, 0, "Edit")
+                    add(0, 2, 1, "Delete")
+                }
+                popup.setOnMenuItemClickListener { item ->
+                    when (item.itemId) {
+                        1 -> onEdit?.invoke(profile.id)
+                        2 -> onDelete?.invoke(profile.id,
+                            profile.label.ifBlank { "${profile.username}@${profile.host}" })
+                    }
+                    true
+                }
+                popup.show()
+            }
         }
-        card.addView(arrow)
+        card.addView(gear, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
 
         val wrapper = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL

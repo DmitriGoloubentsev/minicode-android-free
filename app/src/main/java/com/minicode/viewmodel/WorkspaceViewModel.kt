@@ -39,9 +39,6 @@ class WorkspaceViewModel @Inject constructor(
     private val _bridge = MutableStateFlow<TerminalSessionBridge?>(null)
     val bridge: StateFlow<TerminalSessionBridge?> = _bridge.asStateFlow()
 
-    private val _reconnecting = MutableStateFlow(false)
-    val reconnecting: StateFlow<Boolean> = _reconnecting.asStateFlow()
-
     /** Emitted when a password prompt is needed before connecting */
     data class PasswordRequest(val profileId: String, val profile: ConnectionProfile)
     private val _passwordRequest = MutableStateFlow<PasswordRequest?>(null)

@@ -38,6 +38,25 @@ adb install app/build/outputs/apk/foss/debug/app-foss-debug.apk
 
 MiniCode's terminal responds to the BEL character (`\a` / `0x07`) with vibration and/or chime. Toggle the mode via the bell icon in the terminal header bar (cycles: off / vibrate / vibrate+chime).
 
+## File Tree Follows Terminal Directory
+
+MiniCode can automatically update the SFTP file tree when you `cd` in the terminal. Your shell needs to emit [OSC 7](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html) after each command:
+
+**bash** — add to `~/.bashrc`:
+```bash
+__minicode_osc7() {
+    printf '\e]7;file://%s%s\a' "$HOSTNAME" "$PWD"
+}
+PROMPT_COMMAND="__minicode_osc7${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+```
+
+**zsh** — add to `~/.zshrc`:
+```zsh
+chpwd() {
+    printf '\e]7;file://%s%s\a' "$HOST" "$PWD"
+}
+```
+
 ## Releases
 
 ### v1.3.0 (build 13)

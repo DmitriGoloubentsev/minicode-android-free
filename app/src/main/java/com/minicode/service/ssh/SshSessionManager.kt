@@ -5,6 +5,7 @@ import com.minicode.model.AuthType
 import com.minicode.model.ConnectionProfile
 import com.minicode.model.SessionHandle
 import com.minicode.model.SshSessionState
+import com.minicode.service.terminal.BridgeDebugLog
 import com.minicode.service.terminal.TerminalEmulator
 import com.minicode.service.terminal.TerminalSessionBridge
 import kotlinx.coroutines.CoroutineScope
@@ -403,7 +404,7 @@ class SshSessionManager @Inject constructor() {
             _state.value = SshSessionState.DISCONNECTED
         }
         publishSessionList()
-        Log.d(TAG, "Session $sessionId marked disconnected (tab kept)")
+        BridgeDebugLog.log("markDisconnected: session=$sessionId")
     }
 
     /** Get session IDs in tab order */

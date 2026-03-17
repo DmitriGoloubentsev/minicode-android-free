@@ -13,6 +13,20 @@ import java.io.OutputStream
 
 private const val TAG = "TerminalSessionBridge"
 
+/** File-based debug log for Honor devices that suppress logcat */
+internal object BridgeDebugLog {
+    private var file: java.io.File? = null
+    fun init(context: android.content.Context) {
+        file = java.io.File(context.filesDir, "bridge_debug.log")
+    }
+    fun log(msg: String) {
+        try {
+            val ts = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())
+            file?.appendText("$ts $msg\n")
+        } catch (_: Exception) {}
+    }
+}
+
 class TerminalSessionBridge(
     private val shellChannel: ChannelShell?,
     val emulator: TerminalEmulator,
@@ -91,11 +105,13 @@ class TerminalSessionBridge(
                         onOutput?.invoke()
                     }
                 }
-                Log.d(TAG, "Reader loop ended, isActive=$isActive, channelOpen=${shellChannel.isOpen}")
+                BridgeDebugLog.log("Reader loop ended: isActive=$isActive, channelOpen=${shellChannel.isOpen}")
             } catch (e: IOException) {
-                Log.d(TAG, "Reader IOException: ${e.message}")
+                BridgeDebugLog.log("Reader IOException: ${e.message}")
+            } catch (e: Exception) {
+                BridgeDebugLog.log("Reader Exception: ${e.javaClass.simpleName}: ${e.message}")
             } finally {
-                Log.d(TAG, "Invoking onDisconnect")
+                BridgeDebugLog.log("Invoking onDisconnect")
                 onDisconnect?.invoke()
             }
         }

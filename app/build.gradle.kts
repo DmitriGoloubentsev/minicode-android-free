@@ -14,8 +14,8 @@ android {
         applicationId = "com.minicode"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "1.4.1"
+        versionCode = 17
+        versionName = "1.4.2"
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -47,6 +47,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            ndk { debugSymbolLevel = "FULL" }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

@@ -80,6 +80,11 @@ class SettingsRepository @Inject constructor(
         get() = prefs.getString("image_upload_mode", "tmp") ?: "tmp"
         set(value) = prefs.edit().putString("image_upload_mode", value).apply()
 
+    /** User dismissed the "Install sessio" suggestion permanently */
+    var sessioPromptDismissed: Boolean
+        get() = prefs.getBoolean("sessio_prompt_dismissed", false)
+        set(value) = prefs.edit().putBoolean("sessio_prompt_dismissed", value).apply()
+
     /** Per-connection last used upload path */
     fun getUploadPath(profileId: String): String? =
         prefs.getString("upload_path_$profileId", null)

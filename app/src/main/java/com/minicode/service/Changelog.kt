@@ -15,6 +15,36 @@ object Changelog {
     )
 
     val releases = listOf(
+        Release(18, "1.4.3", listOf(
+            "Settings gear icon in session tab bar (top-right corner)",
+            "Connection list panel: gear icon with Edit/Delete menu",
+            "sessio install prompt: one-tap install when sessio not detected",
+            "sessio session picker: auto-detect and offer to join sessions",
+            "Fix reconnect overlay blocking interaction on failed reconnect",
+            "Fix split divider crash in landscape folded mode",
+            "Force-resize terminal after sessio attach",
+        )),
+        Release(17, "1.4.2", listOf(
+            "File-based debug log for Honor devices",
+            "Proguard fix for sherpa-onnx JNI classes",
+            "OSC 7 file tree sync documentation",
+        )),
+        Release(16, "1.4.1", listOf(
+            "Session persistence: tabs survive app kill and reboot",
+            "Auto-reconnect disconnected sessions on app restart",
+            "Editor tabs and file tree paths restored per session",
+            "sessio session auto-reattach on reconnect",
+        )),
+        Release(15, "1.4.0", listOf(
+            "Password prompt dialog for connections without stored password",
+            "Image upload: configurable path (tmp or project directory)",
+            "Connect on Enter key in password dialog",
+            "Default bell mode: off",
+        )),
+        Release(13, "1.3.0", listOf(
+            "Google Play release: Pro and Free versions",
+            "Automated release signing and upload scripts",
+        )),
         Release(12, "1.2.9", listOf(
             "Redesigned landing page: AI agent workflow story",
             "Connection form: keyboard no longer covers password field",

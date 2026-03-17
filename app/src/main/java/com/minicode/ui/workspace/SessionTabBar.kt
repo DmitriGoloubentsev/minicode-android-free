@@ -16,13 +16,14 @@ import com.minicode.model.SessionHandle
 import com.minicode.model.SshSessionState
 
 /**
- * Horizontal tab bar showing active SSH sessions with a permanent Connections tab.
+ * Horizontal tab bar showing active SSH sessions with a permanent Connections tab
+ * and a fixed settings gear icon on the right.
  */
 class SessionTabBar @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
-) : HorizontalScrollView(context, attrs, defStyleAttr) {
+) : LinearLayout(context, attrs, defStyleAttr) {
 
     companion object {
         const val CONNECTIONS_TAB_ID = "__connections__"
@@ -31,10 +32,16 @@ class SessionTabBar @JvmOverloads constructor(
     var onTabSelected: ((sessionId: String) -> Unit)? = null
     var onTabClosed: ((sessionId: String) -> Unit)? = null
     var onConnectionsTabSelected: (() -> Unit)? = null
+    var onSettingsClicked: (() -> Unit)? = null
 
-    private val container = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
+    private val tabContainer = LinearLayout(context).apply {
+        orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
+    }
+
+    private val scrollView = HorizontalScrollView(context).apply {
+        isHorizontalScrollBarEnabled = false
+        addView(tabContainer, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
     }
 
     private val density = context.resources.displayMetrics.density
@@ -46,9 +53,24 @@ class SessionTabBar @JvmOverloads constructor(
     private val dotAnimators = mutableMapOf<String, ObjectAnimator>()
 
     init {
-        isHorizontalScrollBarEnabled = false
+        orientation = HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
         setBackgroundColor(0xFF141414.toInt())
-        addView(container, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
+
+        // Scrollable tabs take remaining space
+        addView(scrollView, LayoutParams(0, LayoutParams.MATCH_PARENT, 1f))
+
+        // Fixed gear icon on the right
+        val gear = TextView(context).apply {
+            text = "\u2699"  // ⚙
+            textSize = 16f
+            setTextColor(0x99FFFFFF.toInt())
+            gravity = Gravity.CENTER
+            val hPad = (10 * density).toInt()
+            setPadding(hPad, 0, hPad, 0)
+            setOnClickListener { onSettingsClicked?.invoke() }
+        }
+        addView(gear, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
     }
 
     fun updateSessions(sessions: List<SessionHandle>, activeId: String?) {
@@ -60,16 +82,16 @@ class SessionTabBar @JvmOverloads constructor(
         dotAnimators.clear()
         dotViews.clear()
 
-        container.removeAllViews()
+        tabContainer.removeAllViews()
 
         // Connections tab (always first)
-        container.addView(createConnectionsTab())
+        tabContainer.addView(createConnectionsTab())
 
         // Session tabs
         for (session in sessions) {
             val tabIsActive = !connectionsTabActive && session.id == activeId
             val tab = createTab(session, tabIsActive)
-            container.addView(tab)
+            tabContainer.addView(tab)
         }
 
         // Start pulse animations for sessions with active output
@@ -120,7 +142,7 @@ class SessionTabBar @JvmOverloads constructor(
         val isActive = connectionsTabActive
 
         val tabLayout = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             val hPad = (12 * density).toInt()
             val vPad = (4 * density).toInt()
@@ -142,21 +164,21 @@ class SessionTabBar @JvmOverloads constructor(
             setTextColor(if (isActive) 0xFF4CAF50.toInt() else 0x99FFFFFF.toInt())
             gravity = Gravity.CENTER
         }
-        tabLayout.addView(icon, LinearLayout.LayoutParams(
+        tabLayout.addView(icon, LayoutParams(
             LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT
         ))
 
         if (isActive) {
             val wrapper = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
+                orientation = VERTICAL
             }
-            wrapper.addView(tabLayout, LinearLayout.LayoutParams(
+            wrapper.addView(tabLayout, LayoutParams(
                 LayoutParams.WRAP_CONTENT, 0, 1f
             ))
             val accent = View(context).apply {
                 setBackgroundColor(0xFF4CAF50.toInt())
             }
-            wrapper.addView(accent, LinearLayout.LayoutParams(
+            wrapper.addView(accent, LayoutParams(
                 LayoutParams.MATCH_PARENT, (2 * density).toInt()
             ))
             return wrapper
@@ -167,7 +189,7 @@ class SessionTabBar @JvmOverloads constructor(
 
     private fun createTab(session: SessionHandle, tabIsActive: Boolean): View {
         val tabLayout = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             val hPad = (12 * density).toInt()
             val vPad = (4 * density).toInt()
@@ -208,7 +230,7 @@ class SessionTabBar @JvmOverloads constructor(
             }
             background = dotBg
         }
-        tabLayout.addView(dot, LinearLayout.LayoutParams(dotSize, dotSize).apply {
+        tabLayout.addView(dot, LayoutParams(dotSize, dotSize).apply {
             marginEnd = (6 * density).toInt()
         })
         dotViews[session.id] = dot
@@ -223,7 +245,7 @@ class SessionTabBar @JvmOverloads constructor(
             maxWidth = (120 * density).toInt()
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
-        tabLayout.addView(label, LinearLayout.LayoutParams(
+        tabLayout.addView(label, LayoutParams(
             LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT
         ))
 
@@ -239,7 +261,7 @@ class SessionTabBar @JvmOverloads constructor(
                     onTabClosed?.invoke(session.id)
                 }
             }
-            tabLayout.addView(closeBtn, LinearLayout.LayoutParams(closeSize, closeSize).apply {
+            tabLayout.addView(closeBtn, LayoutParams(closeSize, closeSize).apply {
                 marginStart = (8 * density).toInt()
             })
         }
@@ -247,15 +269,15 @@ class SessionTabBar @JvmOverloads constructor(
         // Bottom accent line for active tab
         if (tabIsActive) {
             val wrapper = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
+                orientation = VERTICAL
             }
-            wrapper.addView(tabLayout, LinearLayout.LayoutParams(
+            wrapper.addView(tabLayout, LayoutParams(
                 LayoutParams.WRAP_CONTENT, 0, 1f
             ))
             val accent = View(context).apply {
                 setBackgroundColor(0xFF4CAF50.toInt())
             }
-            wrapper.addView(accent, LinearLayout.LayoutParams(
+            wrapper.addView(accent, LayoutParams(
                 LayoutParams.MATCH_PARENT, (2 * density).toInt()
             ))
             return wrapper

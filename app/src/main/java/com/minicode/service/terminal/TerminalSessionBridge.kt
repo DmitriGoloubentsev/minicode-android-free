@@ -50,6 +50,7 @@ class TerminalSessionBridge(
     var onDisconnect: (() -> Unit)? = null
     var onOutput: (() -> Unit)? = null
     var onSessioDetected: ((List<SessioDetector.SessioSession>) -> Unit)? = null
+    var sessioWasDetected = false
 
     val sessioDetector = SessioDetector()
 
@@ -89,15 +90,23 @@ class TerminalSessionBridge(
                             val text = String(buffer, 0, n, Charsets.UTF_8)
                             for (ch in text) {
                                 if (ch == '\n' || ch == '\r') {
-                                    if (lineBuffer.isNotEmpty()) {
-                                        val detected = sessioDetector.onLine(lineBuffer.toString())
-                                        lineBuffer.clear()
-                                        if (detected != null) {
-                                            onSessioDetected?.invoke(detected)
-                                        }
+                                    val detected = sessioDetector.onLine(lineBuffer.toString())
+                                    lineBuffer.clear()
+                                    if (detected != null) {
+                                        onSessioDetected?.invoke(detected)
+                                        sessioWasDetected = true
                                     }
+                                    if (sessioDetector.isDone) break
                                 } else {
                                     lineBuffer.append(ch)
+                                }
+                            }
+                            // Force timeout check even without a newline
+                            if (!sessioDetector.isDone) {
+                                val detected = sessioDetector.onLine("")
+                                if (detected != null) {
+                                    onSessioDetected?.invoke(detected)
+                                    sessioWasDetected = true
                                 }
                             }
                         }

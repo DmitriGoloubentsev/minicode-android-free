@@ -6,6 +6,7 @@ import com.minicode.model.ConnectionProfile
 import com.minicode.model.SessionHandle
 import com.minicode.model.SshSessionState
 import com.minicode.service.terminal.BridgeDebugLog
+import com.minicode.service.terminal.SessioDetector
 import com.minicode.service.terminal.TerminalEmulator
 import com.minicode.service.terminal.TerminalSessionBridge
 import kotlinx.coroutines.CoroutineScope
@@ -145,17 +146,6 @@ class SshSessionManager @Inject constructor() {
             val emulator = TerminalEmulator(initialCols, initialRows)
             val termBridge = TerminalSessionBridge(channel, emulator, scope)
             val sessionState = MutableStateFlow(SshSessionState.CONNECTED)
-            termBridge.onDisconnect = {
-                // Keep tab as disconnected (grey dot) — user can tap to reconnect
-                markDisconnected(sessionId)
-            }
-            termBridge.start()
-
-            if (!profile.startupCommand.isNullOrBlank()) {
-                termBridge.writeBytes((profile.startupCommand + "\n").toByteArray(Charsets.UTF_8))
-            } else if (!profile.initialDirectory.isNullOrBlank()) {
-                termBridge.writeBytes(("cd ${profile.initialDirectory}\n").toByteArray(Charsets.UTF_8))
-            }
 
             val label = profile.label.ifBlank { "${profile.username}@${profile.host}" }
             val handle = SessionHandle(
@@ -166,15 +156,21 @@ class SshSessionManager @Inject constructor() {
                 state = sessionState,
             )
 
-            // Bind title change to this specific session handle so background
-            // sessions update their own label, not the active session's
+            termBridge.onDisconnect = {
+                markDisconnected(sessionId)
+            }
+            // Store detected sessio sessions on handle so picker shows once UI is ready
+            termBridge.onSessioDetected = { detected ->
+                handle.pendingSessioSessions = detected
+                Log.d(TAG, "Sessio sessions detected during connect (session=$sessionId, count=${detected.size})")
+            }
+
+            // Bind title change to this specific session handle
             emulator.onTitleChanged = { title ->
                 handle.label.value = title
             }
 
-            // Track output activity: set flag on output, auto-reset after 2s idle.
-            // hasActiveOutput is a StateFlow observed directly by UI — no need to
-            // call publishSessionList() which would rebuild the entire tab bar.
+            // Track output activity
             termBridge.onOutput = {
                 if (!handle.hasActiveOutput.value) {
                     handle.hasActiveOutput.value = true
@@ -183,11 +179,19 @@ class SshSessionManager @Inject constructor() {
                     handle.hasUnreadOutput = true
                     publishSessionList()
                 }
-                // Reset idle timer
                 idleTimers[sessionId]?.cancel(false)
                 idleTimers[sessionId] = idleScheduler.schedule({
                     handle.hasActiveOutput.value = false
                 }, 2, TimeUnit.SECONDS)
+            }
+
+            // Start reader AFTER all callbacks are set
+            termBridge.start()
+
+            if (!profile.startupCommand.isNullOrBlank()) {
+                termBridge.writeBytes((profile.startupCommand + "\n").toByteArray(Charsets.UTF_8))
+            } else if (!profile.initialDirectory.isNullOrBlank()) {
+                termBridge.writeBytes(("cd ${profile.initialDirectory}\n").toByteArray(Charsets.UTF_8))
             }
 
             sessions[sessionId] = SessionEntry(handle, sess)
@@ -319,6 +323,9 @@ class SshSessionManager @Inject constructor() {
                 newBridge.onSessioDetected = { sessions ->
                     if (sessions.any { it.name == savedSessioName }) {
                         newBridge.writeBytes("sessio attach $savedSessioName\n".toByteArray())
+                        // Force resize after short delay to reassert MiniCode's dimensions
+                        // (sessio may change server terminal size to match the PC)
+                        newBridge.forceResize(cols, rows)
                         Log.d(TAG, "Auto-attached to sessio session: $savedSessioName (session=$sessionId)")
                     } else {
                         handle.attachedSessioSession = null

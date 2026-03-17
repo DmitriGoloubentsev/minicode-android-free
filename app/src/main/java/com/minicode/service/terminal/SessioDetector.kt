@@ -10,6 +10,9 @@ class SessioDetector {
 
     private var state = State.WAITING
     private val sessions = mutableListOf<SessioSession>()
+    /** True if sessio banner or session listing was seen (even with no active sessions) */
+    var sessioInstalled = false
+        private set
     private var deadline: Long = 0
 
     data class SessioSession(val name: String, val cwd: String?)
@@ -24,18 +27,25 @@ class SessioDetector {
             state = State.DONE
             return null
         }
+        // Strip ANSI escape sequences for matching
+        val clean = line.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "")
+            .replace(Regex("\u001B\\][^\u0007]*\u0007"), "") // OSC sequences
+            .replace(Regex("\u001B\\[[?][0-9;]*[a-zA-Z]"), "") // private mode sequences
+        BridgeDebugLog.log("SessioDetector[$state]: raw=${line.length}ch clean='${clean.trim().take(60)}'")
 
         when (state) {
             State.WAITING -> {
-                if (line.trim() == "Available sessions:") {
+                if (clean.trim() == "Available sessions:" || "no active sessions" in clean) {
+                    sessioInstalled = true
                     state = State.COLLECTING
                 }
             }
             State.COLLECTING -> {
-                val match = SESSION_REGEX.find(line)
+                if (clean.isBlank()) return null // skip empty lines between sessions
+                val match = SESSION_REGEX.find(clean)
                 if (match != null) {
                     val name = match.groupValues[1]
-                    val rest = line.substringAfter(")").trim()
+                    val rest = clean.substringAfter(")").trim()
                     val cwd = rest.substringBefore("\u2014").trim()
                         .ifEmpty { null }
                     sessions.add(SessioSession(name, cwd))
@@ -43,7 +53,7 @@ class SessioDetector {
                     // Non-matching line after sessions = end of list
                     state = State.DONE
                     return sessions.toList()
-                } else if ("no active sessions" in line) {
+                } else if ("no active sessions" in clean) {
                     state = State.DONE
                     return null
                 }
@@ -56,12 +66,13 @@ class SessioDetector {
     fun start() {
         state = State.WAITING
         sessions.clear()
+        sessioInstalled = false
         deadline = System.currentTimeMillis() + 5000
     }
 
     val isDone: Boolean get() = state == State.DONE
 
     companion object {
-        val SESSION_REGEX = Regex("""^\s+(\S+)\s+\(pid\s+\d+\)""")
+        val SESSION_REGEX = Regex("""^\s*(\S+)\s+\(pid\s+\d+\)""")
     }
 }

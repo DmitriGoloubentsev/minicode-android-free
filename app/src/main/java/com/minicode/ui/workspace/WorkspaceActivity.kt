@@ -132,6 +132,7 @@ class WorkspaceActivity : AppCompatActivity() {
     private var connectionListPanel: ConnectionListPanel? = null
     private var showingConnectionList = false
     private var connectionListJob: Job? = null
+    private var sessioCheckJob: Job? = null
 
     // Views found in both layouts
     private lateinit var rootView: View
@@ -141,7 +142,7 @@ class WorkspaceActivity : AppCompatActivity() {
     private lateinit var keyboardToolbar: KeyboardToolbarView
     private lateinit var statusDot: View
     private lateinit var textTitle: TextView
-    private lateinit var btnSettings: ImageView
+    // btnSettings removed — now in SessionTabBar gear icon
     private lateinit var btnDisconnect: ImageView
     private lateinit var btnToggleKeyboard: ImageView
     private lateinit var btnToggleBell: ImageView
@@ -390,6 +391,8 @@ class WorkspaceActivity : AppCompatActivity() {
     private fun bindViews() {
         sessionTabBar = findViewById(R.id.session_tab_bar)
         sessionTabBar.visibility = View.VISIBLE
+        // Show gear icon immediately (even before first session connects)
+        sessionTabBar.updateSessions(emptyList(), null)
         terminalView = findViewById(R.id.terminal_view)
         terminalView.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
             if (hasFocus && !suppressResize) {
@@ -407,7 +410,7 @@ class WorkspaceActivity : AppCompatActivity() {
         keyboardToolbar = findViewById(R.id.keyboard_toolbar)
         statusDot = findViewById(R.id.status_dot)
         textTitle = findViewById(R.id.text_title)
-        btnSettings = findViewById(R.id.btn_settings)
+        // btnSettings removed from layout — now in SessionTabBar
         btnDisconnect = findViewById(R.id.btn_disconnect)
         btnToggleKeyboard = findViewById(R.id.btn_toggle_keyboard)
         btnToggleBell = findViewById(R.id.btn_toggle_bell)
@@ -505,6 +508,9 @@ class WorkspaceActivity : AppCompatActivity() {
         }
         sessionTabBar.onConnectionsTabSelected = {
             showConnectionList()
+        }
+        sessionTabBar.onSettingsClicked = {
+            startActivity(android.content.Intent(this, SettingsActivity::class.java))
         }
         sessionTabBar.onActivityStopped = { sessionId ->
             // Notify when a background session finishes producing output
@@ -1974,10 +1980,6 @@ class WorkspaceActivity : AppCompatActivity() {
     }
 
     private fun setupHeader() {
-        btnSettings.setOnClickListener {
-            startActivity(android.content.Intent(this, SettingsActivity::class.java))
-        }
-
         btnDisconnect.setOnClickListener {
             confirmDisconnect()
         }
@@ -2059,10 +2061,10 @@ class WorkspaceActivity : AppCompatActivity() {
             if (totalWidth <= 0) return@onDragVertical
 
             val currentTreeWidth = fileTreeWidthRatio * totalWidth
-            val newTreeWidth = (currentTreeWidth + delta).coerceIn(
-                80f * resources.displayMetrics.density,
-                totalWidth - 200f * resources.displayMetrics.density,
-            )
+            val minTree = 80f * resources.displayMetrics.density
+            val maxTree = totalWidth - 200f * resources.displayMetrics.density
+            if (maxTree < minTree) return@onDragVertical
+            val newTreeWidth = (currentTreeWidth + delta).coerceIn(minTree, maxTree)
             fileTreeWidthRatio = newTreeWidth / totalWidth
             applySplitVisibility()
         }
@@ -2076,10 +2078,10 @@ class WorkspaceActivity : AppCompatActivity() {
             if (totalHeight <= 0) return@onDragHorizontal
 
             val currentEditorHeight = editorHeightRatio * totalHeight
-            val newEditorHeight = (currentEditorHeight + delta).coerceIn(
-                60f * resources.displayMetrics.density,
-                totalHeight - 60f * resources.displayMetrics.density,
-            )
+            val minEditor = 60f * resources.displayMetrics.density
+            val maxEditor = totalHeight - 60f * resources.displayMetrics.density
+            if (maxEditor < minEditor) return@onDragHorizontal
+            val newEditorHeight = (currentEditorHeight + delta).coerceIn(minEditor, maxEditor)
             editorHeightRatio = newEditorHeight / totalHeight
             applySplitVisibility()
         }
@@ -2397,9 +2399,36 @@ class WorkspaceActivity : AppCompatActivity() {
                         handleTerminalBell()
                     }
                     bridge.onSessioDetected = { sessions ->
+                        BridgeDebugLog.log("onSessioDetected callback fired: ${sessions.size} sessions")
                         val activeHandle = viewModel.sessionManager.getActiveSession()
                         if (activeHandle != null) {
                             runOnUiThread { handleSessioDetected(sessions, activeHandle) }
+                        } else {
+                            BridgeDebugLog.log("onSessioDetected: activeHandle is null!")
+                        }
+                    }
+                    // Show pending sessio picker if sessions were detected before callbacks were set
+                    val activeHandle = viewModel.sessionManager.getActiveSession()
+                    BridgeDebugLog.log("bridge.collect: activeHandle=${activeHandle?.id}, pending=${activeHandle?.pendingSessioSessions?.size}, sessioDetected=${bridge.sessioWasDetected}, sessioInstalled=${bridge.sessioDetector.sessioInstalled}, detectorDone=${bridge.sessioDetector.isDone}")
+                    if (activeHandle != null) {
+                        val pending = activeHandle.pendingSessioSessions
+                        if (pending != null && pending.isNotEmpty()) {
+                            activeHandle.pendingSessioSessions = null
+                            BridgeDebugLog.log("Showing sessio picker from pending: ${pending.size} sessions")
+                            handleSessioDetected(pending, activeHandle)
+                        }
+                    }
+                    // Check for sessio after detection window (6s)
+                    // Cancel previous check (bridge observer fires multiple times)
+                    sessioCheckJob?.cancel()
+                    if (!settingsRepository.sessioPromptDismissed) {
+                        val checkBridge = bridge
+                        sessioCheckJob = lifecycleScope.launch {
+                            kotlinx.coroutines.delay(6000)
+                            if (!checkBridge.sessioWasDetected
+                                && !checkBridge.sessioDetector.sessioInstalled) {
+                                suggestSessioInstall()
+                            }
                         }
                     }
                     // Set up git service for editor
@@ -2744,11 +2773,51 @@ class WorkspaceActivity : AppCompatActivity() {
             // Reconnecting a tab that was previously attached — auto-attach
             handle.bridge.writeBytes("sessio attach $attached\n".toByteArray())
             Toast.makeText(this, "Reconnected to $attached", Toast.LENGTH_SHORT).show()
+            forceResizeAfterSessioAttach(handle)
             persistSessionState()
         } else {
             // New tab or previous session no longer exists — show picker
             handle.attachedSessioSession = null
             showSessioPicker(sessions, handle)
+        }
+    }
+
+    /** Suggest installing sessio when it's not detected on the server */
+    private fun suggestSessioInstall() {
+        if (settingsRepository.sessioPromptDismissed) return
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Install sessio?")
+            .setMessage(
+                "sessio keeps your terminal sessions alive when you disconnect. " +
+                "Resume work from any device — phone, laptop, or tablet.\n\n" +
+                "Install sessio on your server for the best experience."
+            )
+            .setPositiveButton("Install") { _, _ ->
+                val cmd = "command -v git >/dev/null 2>&1 && " +
+                    "git clone https://github.com/DmitriGoloubentsev/sessio.git ~/.sessio && " +
+                    "cd ~/.sessio && python3 sessio.py install && " +
+                    "echo '\\n*** sessio installed! Reconnecting... ***\\n' && " +
+                    "sessio --help && sleep 3 && logout || " +
+                    "echo '\\n*** Error: git is required to install sessio ***'\n"
+                viewModel.bridge.value?.writeBytes(cmd.toByteArray())
+            }
+            .setNegativeButton("Not now", null)
+            .setNeutralButton("Don't ask again") { _, _ ->
+                settingsRepository.sessioPromptDismissed = true
+            }
+            .show()
+    }
+
+    /** After sessio attach, the server's terminal size may match the PC's dimensions.
+     *  Force-resize after a short delay to reassert MiniCode's column/row count. */
+    private fun forceResizeAfterSessioAttach(handle: com.minicode.model.SessionHandle) {
+        lifecycleScope.launch {
+            kotlinx.coroutines.delay(500) // let sessio finish attaching
+            val cols = terminalView.calculateColumns()
+            val rows = terminalView.calculateRows()
+            if (cols > 0 && rows > 0) {
+                handle.bridge.forceResize(cols, rows)
+            }
         }
     }
 
@@ -2766,6 +2835,7 @@ class WorkspaceActivity : AppCompatActivity() {
                 val chosen = sessions[which]
                 handle.attachedSessioSession = chosen.name
                 handle.bridge.writeBytes("sessio attach ${chosen.name}\n".toByteArray())
+                forceResizeAfterSessioAttach(handle)
                 persistSessionState()
             }
             .setNegativeButton("Skip") { dialog, _ ->

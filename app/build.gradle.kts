@@ -14,8 +14,8 @@ android {
         applicationId = "com.minicode"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "1.4.2"
+        versionCode = 18
+        versionName = "1.4.3"
 
         ndk {
             abiFilters += "arm64-v8a"

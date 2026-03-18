@@ -35,7 +35,10 @@ class SessioDetector {
 
         when (state) {
             State.WAITING -> {
-                if (clean.trim() == "Available sessions:" || "no active sessions" in clean) {
+                val trimmed = clean.trim()
+                if (trimmed == "Available sessions:"
+                    || "no active sessions" in clean
+                    || trimmed.startsWith("sessio ")) {
                     sessioInstalled = true
                     state = State.COLLECTING
                 }

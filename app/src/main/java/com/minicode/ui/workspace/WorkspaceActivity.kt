@@ -315,6 +315,8 @@ class WorkspaceActivity : AppCompatActivity() {
         val activeId = restoredIds[activeIdx]
         viewModel.sessionManager.setActive(activeId)
         viewModel.switchSession(activeId)
+        fileTreeViewModel.switchSession(activeId)
+        editorViewModel.switchSession(activeId)
 
         // Attach terminal view to active placeholder
         val activeHandle = viewModel.sessionManager.getSessionHandle(activeId)

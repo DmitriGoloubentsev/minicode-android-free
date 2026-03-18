@@ -15,6 +15,9 @@ object Changelog {
     )
 
     val releases = listOf(
+        Release(19, "1.4.4", listOf(
+            "sessio 0.3.0 compatibility: detect sessions without 'Available sessions:' header",
+        )),
         Release(18, "1.4.3", listOf(
             "Settings gear icon in session tab bar (top-right corner)",
             "Connection list panel: gear icon with Edit/Delete menu",

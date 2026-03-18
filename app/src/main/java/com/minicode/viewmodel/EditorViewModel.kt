@@ -209,15 +209,17 @@ class EditorViewModel @Inject constructor(
         val fileName = filePath.substringAfterLast('/')
         val langInfo = LanguageDetector.detect(fileName)
         val imageExts = setOf("png", "jpg", "jpeg", "gif", "webp", "bmp", "svg")
+        val webViewExts = mapOf("html" to "text/html", "htm" to "text/html", "pdf" to "application/pdf")
         val ext = fileName.substringAfterLast('.', "").lowercase()
         val isImage = ext in imageExts
+        val webViewMime = webViewExts[ext]
 
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
             try {
                 val attrs = retryWithReconnect { sftp -> sftp.stat(filePath) }
-                val maxSize = if (isImage) 10L * 1024 * 1024 else MAX_FILE_SIZE.toLong()
+                val maxSize = if (isImage || webViewMime != null) 10L * 1024 * 1024 else MAX_FILE_SIZE.toLong()
                 if (attrs.size > maxSize) {
                     _error.value = "File too large (${attrs.size / 1024}KB). Max: ${maxSize / 1024}KB"
                     return@launch
@@ -230,6 +232,15 @@ class EditorViewModel @Inject constructor(
                         fileName = fileName,
                         languageId = "image",
                         imageBytes = bytes,
+                    )
+                } else if (webViewMime != null) {
+                    val bytes = retryWithReconnect { sftp -> sftp.readFile(filePath) }
+                    EditorTab(
+                        filePath = filePath,
+                        fileName = fileName,
+                        languageId = ext,
+                        webViewBytes = bytes,
+                        webViewMimeType = webViewMime,
                     )
                 } else {
                     val content = retryWithReconnect { sftp ->

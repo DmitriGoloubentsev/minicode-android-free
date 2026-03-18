@@ -492,6 +492,8 @@ class EditorPanelView @JvmOverloads constructor(
             binding.textEmpty.visibility = View.VISIBLE
             codeEditor.visibility = View.GONE
             binding.imageScroll.visibility = View.GONE
+            binding.webViewer.visibility = View.GONE
+            binding.pdfRecycler.visibility = View.GONE
             binding.textPath.visibility = View.GONE
             binding.btnSave.visibility = View.GONE
             binding.btnFind.visibility = View.GONE
@@ -564,10 +566,63 @@ class EditorPanelView @JvmOverloads constructor(
             binding.textPath.text = tab.filePath
             binding.textPath.visibility = View.VISIBLE
 
-            if (tab.isImage) {
+            if (tab.isWebView) {
+                // Show WebView/PDF, hide everything else
+                codeEditor.visibility = View.GONE
+                binding.imageScroll.visibility = View.GONE
+                binding.pdfRecycler.visibility = View.GONE
+                binding.webViewer.visibility = View.VISIBLE
+                binding.btnSave.visibility = View.GONE
+                binding.btnFind.visibility = View.GONE
+                binding.btnGitDiff.visibility = View.GONE
+                binding.btnGitLog.visibility = View.GONE
+                closeGitPanel()
+                closeGitLogPanel()
+
+                val bytes = tab.webViewBytes
+                if (bytes != null) {
+                    binding.webViewer.setBackgroundColor(android.graphics.Color.WHITE)
+                    binding.webViewer.settings.apply {
+                        builtInZoomControls = true
+                        displayZoomControls = false
+                        loadWithOverviewMode = true
+                        useWideViewPort = true
+                        setSupportZoom(true)
+                        javaScriptEnabled = true
+                        @Suppress("DEPRECATION")
+                        allowFileAccess = true
+                    }
+                    if (tab.webViewMimeType == "application/pdf") {
+                        // Render PDF pages lazily with RecyclerView + PdfRenderer
+                        binding.webViewer.visibility = View.GONE
+                        binding.pdfRecycler.visibility = View.VISIBLE
+                        closePdfRenderer()
+                        val tmpFile = java.io.File(context.cacheDir, "viewer_${tab.fileName}")
+                        tmpFile.writeBytes(bytes)
+                        try {
+                            val fd = android.os.ParcelFileDescriptor.open(tmpFile, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+                            val renderer = android.graphics.pdf.PdfRenderer(fd)
+                            activePdfRenderer = renderer
+                            activePdfFd = fd
+                            val displayWidth = binding.pdfRecycler.width.takeIf { it > 0 }
+                                ?: resources.displayMetrics.widthPixels
+                            binding.pdfRecycler.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(context)
+                            binding.pdfRecycler.adapter = PdfPageAdapter(renderer, displayWidth)
+                        } catch (e: Exception) {
+                            binding.textPath.text = "${tab.filePath} (PDF error: ${e.message})"
+                        }
+                    } else {
+                        val html = String(bytes, Charsets.UTF_8)
+                        binding.webViewer.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+                    }
+                }
+                currentFilePath = tab.filePath
+            } else if (tab.isImage) {
                 // Show image viewer, hide code editor
                 codeEditor.visibility = View.GONE
                 binding.imageScroll.visibility = View.VISIBLE
+                binding.webViewer.visibility = View.GONE
+                binding.pdfRecycler.visibility = View.GONE
                 binding.btnSave.visibility = View.GONE
                 binding.btnFind.visibility = View.GONE
                 binding.btnGitDiff.visibility = View.GONE
@@ -587,9 +642,11 @@ class EditorPanelView @JvmOverloads constructor(
                 }
                 currentFilePath = tab.filePath
             } else {
-                // Show code editor, hide image viewer
+                // Show code editor, hide image/web/pdf viewers
                 codeEditor.visibility = View.VISIBLE
                 binding.imageScroll.visibility = View.GONE
+                binding.webViewer.visibility = View.GONE
+                binding.pdfRecycler.visibility = View.GONE
                 binding.btnFind.visibility = View.VISIBLE
                 binding.btnGitDiff.visibility = View.VISIBLE
                 binding.btnGitLog.visibility = View.VISIBLE
@@ -767,5 +824,52 @@ class EditorPanelView @JvmOverloads constructor(
         }
 
         override fun getItemCount() = commits.size
+    }
+
+    // ── PDF rendering ─────────────────────────────────────────────────
+
+    private var activePdfRenderer: android.graphics.pdf.PdfRenderer? = null
+    private var activePdfFd: android.os.ParcelFileDescriptor? = null
+
+    private fun closePdfRenderer() {
+        activePdfRenderer?.close()
+        activePdfRenderer = null
+        activePdfFd?.close()
+        activePdfFd = null
+    }
+
+    private class PdfPageAdapter(
+        private val renderer: android.graphics.pdf.PdfRenderer,
+        private val displayWidth: Int,
+    ) : androidx.recyclerview.widget.RecyclerView.Adapter<PdfPageAdapter.PageVH>() {
+
+        class PageVH(val imageView: android.widget.ImageView) :
+            androidx.recyclerview.widget.RecyclerView.ViewHolder(imageView)
+
+        override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): PageVH {
+            val iv = android.widget.ImageView(parent.context).apply {
+                layoutParams = androidx.recyclerview.widget.RecyclerView.LayoutParams(
+                    androidx.recyclerview.widget.RecyclerView.LayoutParams.MATCH_PARENT,
+                    androidx.recyclerview.widget.RecyclerView.LayoutParams.WRAP_CONTENT,
+                )
+                scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                adjustViewBounds = true
+            }
+            return PageVH(iv)
+        }
+
+        override fun onBindViewHolder(holder: PageVH, position: Int) {
+            val page = renderer.openPage(position)
+            val scale = displayWidth.toFloat() / page.width
+            val bmpW = displayWidth
+            val bmpH = (page.height * scale).toInt()
+            val bitmap = android.graphics.Bitmap.createBitmap(bmpW, bmpH, android.graphics.Bitmap.Config.ARGB_8888)
+            bitmap.eraseColor(android.graphics.Color.WHITE)
+            page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            page.close()
+            holder.imageView.setImageBitmap(bitmap)
+        }
+
+        override fun getItemCount() = renderer.pageCount
     }
 }

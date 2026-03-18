@@ -9,7 +9,10 @@ data class EditorTab(
     val cursorPosition: Int = 0,
     val scrollY: Int = 0,
     val imageBytes: ByteArray? = null,
+    val webViewBytes: ByteArray? = null,
+    val webViewMimeType: String? = null,
 ) {
     val isModified: Boolean get() = content != originalContent
     val isImage: Boolean get() = imageBytes != null
+    val isWebView: Boolean get() = webViewBytes != null
 }

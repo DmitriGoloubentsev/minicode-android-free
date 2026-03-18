@@ -30,12 +30,24 @@ android {
         }
         create("play") {
             dimension = "distribution"
-            // Google Play Store build — includes sherpa-onnx for offline voice
+            // Google Play Store Pro — includes sherpa-onnx for offline voice
         }
         create("playFree") {
             dimension = "distribution"
             applicationIdSuffix = ".free"
             // Google Play Free — same as foss features but with update checker
+        }
+        create("playDev") {
+            dimension = "distribution"
+            applicationIdSuffix = ".dev"
+            // Direct download from minicode.app — coexists with Play Store version
+        }
+    }
+
+    // playDev shares play's source set (same SherpaRecognizer + ModelDownloadManager)
+    sourceSets {
+        getByName("playDev") {
+            java.srcDirs("src/play/java")
         }
     }
 
@@ -129,9 +141,11 @@ dependencies {
     implementation("io.github.Rosemoe.sora-editor:editor")
     implementation("io.github.Rosemoe.sora-editor:language-textmate")
 
-    // Sherpa-ONNX offline speech recognition (NVIDIA Parakeet TDT) — play flavor only
+    // Sherpa-ONNX offline speech recognition (NVIDIA Parakeet TDT) — play & playDev flavors
     "playImplementation"(files("libs/sherpa-onnx-1.12.28.aar"))
+    "playDevImplementation"(files("libs/sherpa-onnx-1.12.28.aar"))
 
-    // Apache Commons Compress for tar.bz2 model extraction (play flavor only — model download)
+    // Apache Commons Compress for tar.bz2 model extraction (play & playDev flavors — model download)
     "playImplementation"("org.apache.commons:commons-compress:1.26.1")
+    "playDevImplementation"("org.apache.commons:commons-compress:1.26.1")
 }

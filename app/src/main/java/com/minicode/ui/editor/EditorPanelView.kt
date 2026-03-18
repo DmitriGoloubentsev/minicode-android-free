@@ -492,7 +492,7 @@ class EditorPanelView @JvmOverloads constructor(
             binding.textEmpty.visibility = View.VISIBLE
             codeEditor.visibility = View.GONE
             binding.imageScroll.visibility = View.GONE
-            binding.webViewer.visibility = View.GONE
+            binding.webViewerContainer.visibility = View.GONE
             binding.pdfRecycler.visibility = View.GONE
             binding.textPath.visibility = View.GONE
             binding.btnSave.visibility = View.GONE
@@ -571,7 +571,7 @@ class EditorPanelView @JvmOverloads constructor(
                 codeEditor.visibility = View.GONE
                 binding.imageScroll.visibility = View.GONE
                 binding.pdfRecycler.visibility = View.GONE
-                binding.webViewer.visibility = View.VISIBLE
+                binding.webViewerContainer.visibility = View.VISIBLE
                 binding.btnSave.visibility = View.GONE
                 binding.btnFind.visibility = View.GONE
                 binding.btnGitDiff.visibility = View.GONE
@@ -581,20 +581,9 @@ class EditorPanelView @JvmOverloads constructor(
 
                 val bytes = tab.webViewBytes
                 if (bytes != null) {
-                    binding.webViewer.setBackgroundColor(android.graphics.Color.WHITE)
-                    binding.webViewer.settings.apply {
-                        builtInZoomControls = true
-                        displayZoomControls = false
-                        loadWithOverviewMode = true
-                        useWideViewPort = true
-                        setSupportZoom(true)
-                        javaScriptEnabled = true
-                        @Suppress("DEPRECATION")
-                        allowFileAccess = true
-                    }
                     if (tab.webViewMimeType == "application/pdf") {
                         // Render PDF pages lazily with RecyclerView + PdfRenderer
-                        binding.webViewer.visibility = View.GONE
+                        binding.webViewerContainer.visibility = View.GONE
                         binding.pdfRecycler.visibility = View.VISIBLE
                         closePdfRenderer()
                         val tmpFile = java.io.File(context.cacheDir, "viewer_${tab.fileName}")
@@ -612,8 +601,10 @@ class EditorPanelView @JvmOverloads constructor(
                             binding.textPath.text = "${tab.filePath} (PDF error: ${e.message})"
                         }
                     } else {
+                        // HTML — create WebView lazily
+                        val wv = getOrCreateWebView()
                         val html = String(bytes, Charsets.UTF_8)
-                        binding.webViewer.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+                        wv.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
                     }
                 }
                 currentFilePath = tab.filePath
@@ -621,7 +612,7 @@ class EditorPanelView @JvmOverloads constructor(
                 // Show image viewer, hide code editor
                 codeEditor.visibility = View.GONE
                 binding.imageScroll.visibility = View.VISIBLE
-                binding.webViewer.visibility = View.GONE
+                binding.webViewerContainer.visibility = View.GONE
                 binding.pdfRecycler.visibility = View.GONE
                 binding.btnSave.visibility = View.GONE
                 binding.btnFind.visibility = View.GONE
@@ -645,7 +636,7 @@ class EditorPanelView @JvmOverloads constructor(
                 // Show code editor, hide image/web/pdf viewers
                 codeEditor.visibility = View.VISIBLE
                 binding.imageScroll.visibility = View.GONE
-                binding.webViewer.visibility = View.GONE
+                binding.webViewerContainer.visibility = View.GONE
                 binding.pdfRecycler.visibility = View.GONE
                 binding.btnFind.visibility = View.VISIBLE
                 binding.btnGitDiff.visibility = View.VISIBLE
@@ -827,6 +818,29 @@ class EditorPanelView @JvmOverloads constructor(
     }
 
     // ── PDF rendering ─────────────────────────────────────────────────
+
+    private var webView: android.webkit.WebView? = null
+
+    private fun getOrCreateWebView(): android.webkit.WebView {
+        webView?.let { return it }
+        val wv = android.webkit.WebView(context).apply {
+            setBackgroundColor(android.graphics.Color.WHITE)
+            settings.apply {
+                builtInZoomControls = true
+                displayZoomControls = false
+                loadWithOverviewMode = true
+                useWideViewPort = true
+                setSupportZoom(true)
+                javaScriptEnabled = true
+            }
+        }
+        binding.webViewerContainer.addView(wv, android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+        ))
+        webView = wv
+        return wv
+    }
 
     private var activePdfRenderer: android.graphics.pdf.PdfRenderer? = null
     private var activePdfFd: android.os.ParcelFileDescriptor? = null

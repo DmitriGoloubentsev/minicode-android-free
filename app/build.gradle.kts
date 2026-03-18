@@ -14,8 +14,8 @@ android {
         applicationId = "com.minicode"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "1.4.4"
+        versionCode = 20
+        versionName = "1.4.5"
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -41,13 +41,6 @@ android {
             dimension = "distribution"
             applicationIdSuffix = ".dev"
             // Direct download from minicode.app — coexists with Play Store version
-        }
-    }
-
-    // playDev shares play's source set (same SherpaRecognizer + ModelDownloadManager)
-    sourceSets {
-        getByName("playDev") {
-            java.srcDirs("src/play/java")
         }
     }
 

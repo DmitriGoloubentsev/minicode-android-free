@@ -15,6 +15,14 @@ object Changelog {
     )
 
     val releases = listOf(
+        Release(20, "1.4.5", listOf(
+            "PDF viewer with lazy page rendering",
+            "HTML viewer with WebView",
+            "MiniCode Dev flavor for direct download (coexists with Play Store)",
+            "Fix ProGuard stripping TextMate/Oniguruma classes in release builds",
+            "Fix file tree not restoring saved path on session restore",
+            "Flavor name and version shown on connection list screen",
+        )),
         Release(19, "1.4.4", listOf(
             "sessio 0.3.0 compatibility: detect sessions without 'Available sessions:' header",
         )),

@@ -170,9 +170,9 @@
             android:layout_height="match_parent"
             android:visibility="gone" />
 
-        <!-- WebView (for HTML files) -->
-        <WebView
-            android:id="@+id/web_viewer"
+        <!-- WebView container (WebView created programmatically to avoid inflation issues) -->
+        <FrameLayout
+            android:id="@+id/web_viewer_container"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:visibility="gone"

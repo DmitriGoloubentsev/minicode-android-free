@@ -46,6 +46,10 @@ class ConnectionListFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        // Show app name + version in toolbar
+        val pInfo = requireContext().packageManager.getPackageInfo(requireContext().packageName, 0)
+        binding.toolbar.title = "${getString(R.string.app_name)} v${pInfo.versionName} (${pInfo.longVersionCode})"
+
         adapter = ConnectionAdapter(
             onItemClick = { profile ->
                 val intent = Intent(requireContext(), WorkspaceActivity::class.java).apply {

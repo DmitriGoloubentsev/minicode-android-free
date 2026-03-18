@@ -139,7 +139,7 @@ class SettingsActivity : AppCompatActivity() {
         val voiceSection = findViewById<View>(R.id.voice_section)
 
         // Hide entire Parakeet section in builds without offline voice recognition
-        if (BuildConfig.FLAVOR != "play") {
+        if (BuildConfig.FLAVOR != "play" && BuildConfig.FLAVOR != "playDev") {
             voiceSection.visibility = View.GONE
             viewModel.setSpeechEngine("google")
             return
